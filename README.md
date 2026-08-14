@@ -42,6 +42,21 @@ python -m pip install -r requirements.txt
 export CUDA_HOME=/path/to/cuda  # only when auto-detection is insufficient
 ```
 
+## Quick Start
+
+Run these commands from the repository root. The first CUDA run JIT-compiles
+the extension and can take a few minutes.
+
+```bash
+./baseline/run.sh smoke       # short Triton/CUDA V7 correctness and timing
+./baseline/run.sh store       # raw Q/K/V -> vLLM Store -> both decoders
+./baseline/run.sh benchmark   # official Triton and CUDA V1-V7 measurements
+```
+
+The runner works from any current directory and accepts `PYTHON` and
+`CUDA_HOME` overrides. See the [baseline guide](baseline/README.md) for its
+other modes and a file-by-file map.
+
 ## Licensing
 
 The extracted vLLM files under `vllm/` and their flat copies under
@@ -331,14 +346,14 @@ CUDA V7: 34 static BAR.SYNC sites, 2.007x faster than V2-fixed
 
 ## Directory Map
 
-```text
-baseline/   Fixed inputs, standalone launchers, correctness, timing
-cuda/       Versioned CUDA entry points, shared Stage1 template, bindings/builds
-reference/  Unmodified snapshots copied from the source vLLM tree
-results/    Pre-fix V2 Nsight Compute reports and SASS export
-docs/       Historical profiling/design notes
-vllm/       Path-preserving extract of upstream vLLM TurboQuant sources
-```
+| Path | Role | Start here |
+| --- | --- | --- |
+| `baseline/` | Fixed inputs, standalone launchers, correctness, and timing | [Baseline guide](baseline/README.md) |
+| `cuda/` | Versioned CUDA entry points, shared Stage1 template, and bindings | [CUDA guide](cuda/README.md) |
+| `reference/` | Unmodified flat snapshots copied from the source vLLM tree | [Provenance](reference/README.md) |
+| `results/` | Pre-fix V2 Nsight Compute reports and SASS export | [Results notes](results/README.md) |
+| `docs/` | Historical profiling and design notes | [V2 Stage1 notes](docs/v2_stage1.md) |
+| `vllm/` | Path-preserving extraction of upstream vLLM TurboQuant sources | [Extraction guide](vllm/README.md) |
 
 ## Known Limits
 
@@ -365,9 +380,9 @@ vllm/       Path-preserving extract of upstream vLLM TurboQuant sources
   verified `sm_86` lane-to-row mapping. `cuda/wmma_fragment_probe.cu` reproduces
   that mapping. Treat this code path as architecture-specific until it is
   replaced by an explicit inline `mma.sync` register contract.
-- Synthetic pages are contiguous and all sequences have length 4096. Random
-  block tables, variable lengths, and real store-generated caches remain to be
-  tested.
+- Synthetic pages are contiguous and all sequences have length 4096. The fixed
+  workload has also been tested with real Store-generated caches; random block
+  tables and variable sequence lengths remain to be tested.
 - `reference/soa_decode_v2.py` intentionally preserves the copied upstream
   implementation and therefore still contains the `tl.interleave` issue.
 - The copied backend's logical cache shape declaration is head-major, while

@@ -40,6 +40,20 @@ python -m pip install -r requirements.txt
 export CUDA_HOME=/path/to/cuda  # 仅在自动检测失败时需要
 ```
 
+## 快速开始
+
+请在仓库根目录执行以下命令。第一次运行 CUDA 时会 JIT 编译 extension，
+可能需要几分钟。
+
+```bash
+./baseline/run.sh smoke       # 短版 Triton/CUDA V7 correctness 与计时
+./baseline/run.sh store       # 原始 Q/K/V -> vLLM Store -> 两种 Decode
+./baseline/run.sh benchmark   # 正式 Triton 与 CUDA V1-V7 测量
+```
+
+该 runner 可以从任意当前目录调用，并支持通过 `PYTHON` 和 `CUDA_HOME`
+覆盖环境。其他模式及逐文件说明见 [baseline 指南](baseline/README_CN.md)。
+
 ## 许可证
 
 `vllm/` 中摘取的 vLLM 文件以及 `reference/` 中对应的扁平副本继续使用上游
@@ -320,14 +334,14 @@ CUDA V7: 34 static BAR.SYNC sites，比 V2-fixed 快 2.007x
 
 ## 目录结构
 
-```text
-baseline/   固定输入、独立 launcher、correctness 和计时脚本
-cuda/       分版本 CUDA 入口、共享 Stage1 模板、binding 和本地编译产物
-reference/  从 vLLM 源码树复制且未经修改的快照
-results/    V2 修复前的 Nsight Compute 报告和 SASS 导出
-docs/       历史 profiling 与设计记录
-vllm/       按原始路径保存的上游 vLLM TurboQuant 摘取源码
-```
+| 路径 | 作用 | 从这里开始 |
+| --- | --- | --- |
+| `baseline/` | 固定输入、独立 launcher、correctness 与计时 | [Baseline 指南](baseline/README_CN.md) |
+| `cuda/` | 分版本 CUDA 入口、共享 Stage1 模板与 binding | [CUDA 指南](cuda/README_CN.md) |
+| `reference/` | 从 vLLM 源码树复制且未经修改的扁平快照 | [来源说明](reference/README.md) |
+| `results/` | V2 修复前的 Nsight Compute 报告和 SASS 导出 | [结果说明](results/README.md) |
+| `docs/` | 历史 profiling 与设计记录 | [V2 Stage1 记录](docs/v2_stage1.md) |
+| `vllm/` | 按原始路径保存的上游 vLLM TurboQuant 摘取源码 | [摘取说明](vllm/README.md) |
 
 ## 已知限制
 
@@ -353,8 +367,9 @@ vllm/       按原始路径保存的上游 vLLM TurboQuant 摘取源码
   中缩放 WMMA accumulator fragment。`cuda/wmma_fragment_probe.cu` 可以复现
   该映射。在将其替换为具有明确 register contract 的 inline `mma.sync`
   之前，应将此路径视为特定架构实现。
-- 合成页面是连续的，并且所有 sequence length 都是 4096。随机 block
-  table、可变长度和由真实 store kernel 生成的 cache 仍有待测试。
+- 合成页面是连续的，并且所有 sequence length 都是 4096。固定 workload
+  已经使用真实 Store 生成的 cache 完成测试；随机 block table 和可变
+  sequence length 仍有待测试。
 - `reference/soa_decode_v2.py` 有意保留复制来的上游实现，因此其中仍然存在
   `tl.interleave` 问题。
 - 复制来的 backend 在逻辑 cache shape 声明中采用 head-major，但其
