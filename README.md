@@ -1,0 +1,346 @@
+# TurboQuant CUDA Stage1 Study
+
+[中文版](README_CN.md)
+
+This directory benchmarks TurboQuant `turboquant_4bit_nc` decode Stage1 on a
+fixed Qwen3-4B-shaped workload. It is a kernel research harness, not yet a
+drop-in vLLM backend.
+
+## Repository Scope
+
+The CUDA kernels, standalone Triton baselines, benchmark harness, and analysis
+in this repository are the research implementation developed here. The
+`vllm/` directory is different: it is a path-preserving extraction of the
+original TurboQuant-related files from a local vLLM source tree, not a complete
+vLLM checkout and not this repository's CUDA implementation. See
+[`vllm/README.md`](vllm/README.md) and
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for provenance and licensing.
+
+`reference/` contains flat, byte-identical copies of selected files from the
+extracted `vllm/` tree. This intentional duplication lets the standalone
+benchmark load the reference kernels without depending on a full vLLM install.
+
+## Requirements
+
+The recorded results were collected with the following environment:
+
+```text
+GPU             NVIDIA RTX 3090 (sm_86)
+Python          3.11
+PyTorch         2.9.1+cu128
+Triton          3.5.1
+Ninja           1.13.0
+CUDA compiler   12.2
+```
+
+Install a CUDA-enabled PyTorch build suitable for the host, then install the
+remaining dependencies. If CUDA is not found automatically, set `CUDA_HOME`
+before launching a CUDA benchmark.
+
+```bash
+python -m pip install -r requirements.txt
+export CUDA_HOME=/path/to/cuda  # only when auto-detection is insufficient
+```
+
+## Licensing
+
+The extracted vLLM files under `vllm/` and their flat copies under
+`reference/` retain the upstream Apache-2.0 license. No repository-wide
+license has been selected yet for the original CUDA research code. Add a
+top-level `LICENSE` before public release if you intend to grant reuse rights
+for that code.
+
+## Fixed Workload
+
+| Parameter | Value |
+| --- | ---: |
+| GPU used for current results | NVIDIA RTX 3090 (`sm_86`) |
+| Batch | 64 |
+| Context length | 4096 |
+| Q heads / KV heads | 32 / 8 |
+| GQA group | 4 |
+| Head dimension | 128 |
+| KV block size | 16 |
+| KV splits | 32 |
+| K / V quantization | 4-bit Lloyd-Max / 4-bit uniform |
+| Cache layout | AoS or SoA, depending on baseline |
+
+Timing includes Stage1 only. Query rotation, pair-LUT construction, Stage2
+split reduction, input construction, allocation, and JIT compilation are
+outside the timed region.
+
+## Baselines
+
+The authoritative baseline command is:
+
+```bash
+cd baseline
+python -B bench_triton_baselines.py \
+  --include-cuda --include-cuda-v2 --include-cuda-v3 \
+  --include-cuda-v4 --include-cuda-v5 --include-cuda-v6 \
+  --include-cuda-v7
+```
+
+The harness builds one logical cache, converts it losslessly between SoA and
+AoS, rotates measurement order across five rounds, and reports medians over
+100 CUDA-event-timed launches per round.
+
+Current RTX 3090 results (2026-08-14):
+
+| Implementation | Stage1 median | Role |
+| --- | ---: | --- |
+| AoS Triton V1 | 3.407176 ms | Production/reference baseline |
+| SoA Triton V1 | 3.207219 ms | Layout ablation |
+| SoA Triton V2-fixed | 2.795724 ms | Strong baseline and primary target |
+| CUDA V1 | 4.602296 ms | First CUDA candidate |
+| CUDA V2 | 4.024474 ms | Warp-per-Q experiment |
+| CUDA V3 | 2.303662 ms | Single-pass Tensor Core candidate |
+| CUDA V4 | 2.251817 ms | Fixed-workload `sm_86` candidate |
+| CUDA V5 | 1.724498 ms | Direct WMMA register writeback candidate |
+| CUDA V6 | 1.409382 ms | Vectorized INT4 decode candidate |
+| CUDA V7 | 1.392732 ms | Fused tile-barrier candidate |
+
+Measured improvements:
+
+```text
+AoS V1 -> SoA V1       1.062x
+SoA V1 -> V2-fixed     1.147x
+AoS V1 -> V2-fixed     1.219x
+CUDA V1 -> CUDA V2     1.144x
+CUDA V1 vs V2-fixed    1.646x slower
+CUDA V2 vs V2-fixed    1.440x slower
+CUDA V2 -> CUDA V3     1.747x
+CUDA V3 vs V2-fixed    1.214x faster
+CUDA V3 -> CUDA V4     1.023x
+CUDA V4 vs V2-fixed    1.242x faster
+CUDA V4 -> CUDA V5     1.306x
+CUDA V5 vs V2-fixed    1.621x faster
+CUDA V5 -> CUDA V6     1.224x
+CUDA V6 vs V2-fixed    1.984x faster
+CUDA V6 -> CUDA V7     1.012x
+CUDA V7 vs V2-fixed    2.007x faster
+```
+
+Correctness against SoA Triton V1 on the full Stage1 output:
+
+```text
+AoS V1 output max abs       1.21e-05
+V2-fixed output max abs     8.46e-05
+CUDA V1 output max abs      6.56e-07
+CUDA V2 output max abs      7.15e-07
+CUDA V3 output max abs      8.46e-05
+CUDA V4 output max abs      8.46e-05
+CUDA V5 output max abs      8.46e-05
+CUDA V6 output max abs      8.46e-05
+CUDA V7 output max abs      8.46e-05
+```
+
+## Version And Entry-Point Map
+
+The CUDA version number records each successive **Stage1 optimization**. It
+does not mean that every historical version has three decode stages:
+
+| CUDA source | Stage1 | Stage2 | Full | Main change |
+| --- | :---: | :---: | :---: | --- |
+| `tq4_cuda_v1.cu` | yes | - | - | first CUDA candidate |
+| `tq4_cuda_v2.cu` | yes | - | - | warp per Q head |
+| `tq4_cuda_v3.cu` | yes | - | - | single-pass WMMA Tensor Core |
+| `tq4_cuda_v4.cu` | yes | - | - | fixed-workload specialization |
+| `tq4_cuda_v5.cu` | yes | - | - | direct fragment writeback |
+| `tq4_cuda_v6.cu` | yes | - | - | vectorized packed-cache decode |
+| `tq4_cuda_v7.cu` | yes | yes | yes | fused barriers plus complete decode |
+
+V4 through V7 select compile-time optimizations and include the shared Stage1
+implementation from `cuda/tq4_cuda_stage1_template.cuh`. The template is not
+another benchmark version. V7 exports three explicit Python entry points:
+
+```text
+tq4_cuda_v7_stage1(...)  -> Stage1 only; produces mid_o
+tq4_cuda_v7_stage2(...)  -> Stage2 only; consumes mid_o
+tq4_cuda_v7_full(...)    -> calls V7 Stage1, then V7 Stage2
+```
+
+The older `tq4_cuda_v7(...)` name remains as a compatibility alias for
+`tq4_cuda_v7_stage1(...)`, so existing benchmark commands keep working.
+
+## Complete Decode
+
+The complete-decode benchmark adds the Stage2 log-sum-exp reduction across all
+32 KV splits:
+
+```bash
+cd baseline
+python -B bench_full_decode.py
+```
+
+Here, "complete decode" means pre-rotated `q_rot` plus compressed KV through
+Stage1 and Stage2 to the final `[B,Hq,D]` attention output and `[B,Hq]` LSE.
+Query rotation and cache store remain outside the benchmark.
+
+Five-round RTX 3090 medians:
+
+| Implementation | Stage1 | Stage2 | Full decode |
+| --- | ---: | ---: | ---: |
+| Triton V2-fixed | 2.773299 ms | 0.051436 ms | 2.825226 ms |
+| CUDA V7 | 1.392681 ms | 0.044339 ms | 1.436283 ms |
+
+```text
+CUDA V7 full vs Triton full  1.967x faster
+CUDA Stage2 share             3.09% of full decode
+```
+
+Final-output correctness against the Triton complete decode:
+
+```text
+CUDA Stage2 output max abs    2.38e-07
+CUDA Stage2 LSE max abs       9.54e-07
+CUDA V7 full output max abs   5.96e-07
+CUDA V7 full LSE max abs      9.54e-07
+```
+
+The CUDA Stage2 kernel uses 40 registers/thread and 136 B shared/CTA.
+
+`baseline/bench_cuda_v1.py` additionally diagnoses one worst-case split
+against canonical FP32 and a PyTorch mimic of the Triton FP16 tensor-core
+path.
+
+## V2 Correctness Fix
+
+The copied upstream V2 reconstructs V with `tl.interleave(v_lo, v_hi)` and
+feeds that value directly to `tl.dot`. On CUDA this produced a silent V-column
+permutation: LSE remained correct, but output max error reached about `0.325`.
+
+`baseline/tq4_v2_stage1.py` is the fixed research baseline. It constructs the
+final `[TILE_SIZE, BLOCK_D]` V layout directly with `d // 2` byte indices and
+per-dimension nibble shifts. Its max output error against canonical FP32 is
+about `8.5e-05`.
+
+The old erroneous V2 timing near `2.29 ms` is invalid and must not be used.
+
+## CUDA Candidates
+
+CUDA V1 maps one CTA to `(batch, KV head, split)`. Each thread owns one D
+coordinate for all four GQA heads. This reuses decoded K/V, but performs four
+warp reductions in each of four warps per token and synchronizes through
+shared memory.
+
+CUDA V2 maps one warp to each Q head and gives every lane four D coordinates.
+It reduces QK once per warp, keeps online softmax warp-local, and uses no
+shared memory or CTA barriers. Static cubin resources changed from:
+
+```text
+CUDA V1: 40 registers/thread, 1328 B shared/CTA, 20 SHFL.DOWN sites
+CUDA V2: 40 registers/thread,    0 B shared/CTA,  5 SHFL.DOWN sites
+```
+
+The tradeoff is four-way repeated K/V loads and dequantization. The experiment
+improves Stage1 by about 15%, but remains 1.440x slower than V2-fixed.
+
+CUDA V3 now follows the Triton execution graph in one 16-token tile loop:
+dequantize K/V, compute grouped QK, update online softmax, rescale the PV
+accumulator by row, and compute PV. The accumulator remains in WMMA registers
+across all eight tiles. This removes the original two-pass score/weight staging
+and improves over CUDA V2 by 1.747x. It is 1.214x faster than V2-fixed, with
+the same expected FP16 Tensor Core error scale.
+
+Static cubin inspection confirms actual Tensor Core code generation:
+
+```text
+CUDA V3: 66 registers/thread, 21408 B shared/CTA
+CUDA V3: 20 static HMMA.16816.F32 instruction sites
+```
+
+CUDA V4 keeps the V3 online-softmax design and specializes it further for the
+fixed aligned workload. It performs one block-table load per 16-token tile,
+initializes only the four real Q rows, uses a warp-register centroid LUT, and
+fully unrolls the eight tile iterations. The result is a further 1.023x over
+V3 and 1.242x over V2-fixed.
+
+```text
+CUDA V4: 58 registers/thread, 21408 B shared/CTA
+CUDA V4: 160 static HMMA sites and 42 static BAR.SYNC sites
+```
+
+The V4 static counts include all eight fully unrolled tile iterations; they do
+not represent additional runtime MMA or barriers relative to the loop body.
+
+CUDA V5 removes V4's full `16x128` shared-memory output scratch. The verified
+`sm_86` WMMA row/column mapping lets the first four valid accumulator rows be
+written directly from fragment registers to their final `mid_o` addresses.
+The Tensor Core work is unchanged, but shared memory drops by about 7 KB and
+the full accumulator shared store/reload path disappears.
+
+```text
+CUDA V5: 58 registers/thread, 14224 B shared/CTA
+CUDA V5: 1.306x faster than V4, 1.621x faster than V2-fixed
+```
+
+CUDA V6 keeps V5's direct register writeback and vectorizes the packed-cache
+decode. Each aligned `uint32` load supplies four packed K or V bytes, and
+`half2` stores write the corresponding eight reconstructed dimensions. This
+reduces load, address-generation, and shared-store instruction counts without
+changing occupancy or Tensor Core work.
+
+```text
+CUDA V6: 58 registers/thread, 14224 B shared/CTA
+CUDA V6: 1.224x faster than V5, 1.984x faster than V2-fixed
+```
+
+CUDA V7 removes the barrier at the end of each tile. The following tile's
+metadata writes use independent shared storage, and its existing opening
+barrier simultaneously waits for the preceding PV MMA and publishes the new
+metadata. This reduces executed CTA barriers from 42 to 34 without changing
+the cache, WMMA, or occupancy configuration.
+
+```text
+CUDA V7: 58 registers/thread, 14224 B shared/CTA
+CUDA V7: 34 static BAR.SYNC sites, 2.007x faster than V2-fixed
+```
+
+## Directory Map
+
+```text
+baseline/   Fixed inputs, standalone launchers, correctness, timing
+cuda/       Versioned CUDA entry points, shared Stage1 template, bindings/builds
+reference/  Unmodified snapshots copied from the source vLLM tree
+results/    Pre-fix V2 Nsight Compute reports and SASS export
+docs/       Historical profiling/design notes
+vllm/       Path-preserving extract of upstream vLLM TurboQuant sources
+```
+
+## Known Limits
+
+- Existing Nsight Compute reports predate the V2 correctness fix. Re-profile
+  V2-fixed before using their exact metrics for optimization decisions.
+- A CUDA V1 NCU attempt failed with `ERR_NVGPUCTRPERM`; no dynamic counter
+  claims are made for CUDA V1/V2. Cubin resource and SASS instruction counts
+  above come from `cuobjdump`.
+- CUDA V1 assumes the fixed aligned workload. Its page mapping is not correct
+  for arbitrary sequence lengths or split boundaries.
+- CUDA V3 currently supports at most 128 tokens per split, matching the fixed
+  `context=4096, splits=32` workload. It is an optimization candidate rather
+  than a general production kernel.
+- CUDA V4 requires exactly 128 aligned tokens per split. It deliberately trades
+  general sequence/split support for the fixed-workload fast path.
+- CUDA V5 inherits V4's fixed-workload and `sm_86` fragment-mapping constraints.
+  Its direct writeback must be re-derived and tested before targeting another
+  GPU architecture.
+- CUDA V6 additionally assumes four-byte alignment for packed K/V vector loads;
+  the fixed 128-byte slot layout satisfies that contract.
+- CUDA V7 relies on the next tile's metadata barrier to protect the preceding
+  PV inputs before K/V shared storage is overwritten.
+- CUDA V3 scales WMMA accumulator fragments in registers using the empirically
+  verified `sm_86` lane-to-row mapping. `cuda/wmma_fragment_probe.cu` reproduces
+  that mapping. Treat this code path as architecture-specific until it is
+  replaced by an explicit inline `mma.sync` register contract.
+- Synthetic pages are contiguous and all sequences have length 4096. Random
+  block tables, variable lengths, and real store-generated caches remain to be
+  tested.
+- `reference/soa_decode_v2.py` intentionally preserves the copied upstream
+  implementation and therefore still contains the `tl.interleave` issue.
+- The copied backend's logical cache shape declaration is head-major, while
+  its store/decode launchers treat dimensions as position-major. Resolve that
+  production integration contract before upstreaming a CUDA kernel.
+- The repository does not yet integrate CUDA V7 into the production vLLM
+  backend; the standalone fixed-workload harness is the current integration
+  boundary.

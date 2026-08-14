@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# PyTorch CUDA extension builds
+/cuda/build_v*/
+*.o
+*.so
+*.a
+.ninja_deps
+.ninja_log
+
+# Packaging and editor state
+build/
+dist/
+*.egg-info/
+.idea/
+.vscode/
+.DS_Store
+
+# Local environment files
+.env
+.env.*

@@ -1,0 +1,4 @@
+# Install a CUDA-enabled PyTorch build appropriate for your driver/toolkit.
+torch>=2.9,<3
+triton>=3.5,<4
+ninja>=1.11
