@@ -14,7 +14,6 @@ def main():
     device = torch.device("cuda")
     extension = build_extension()
     inputs = build_inputs(device)
-
     mid_o = torch.empty(
         BATCH_SIZE,
         NUM_Q_HEADS,
@@ -36,7 +35,6 @@ def main():
 
     for _ in range(5):
         launch()
-
     torch.cuda.synchronize()
     launch()
     torch.cuda.synchronize()

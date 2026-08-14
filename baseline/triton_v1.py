@@ -32,7 +32,6 @@ REFERENCE_DIR = PROJECT_ROOT / "reference"
 
 def _install_reference_import_stubs() -> None:
     """Provide only the vLLM symbols needed to define Stage1 kernels."""
-
     module_names = (
         "vllm",
         "vllm.platforms",
@@ -42,40 +41,29 @@ def _install_reference_import_stubs() -> None:
         "vllm.v1.attention.ops",
         "vllm.v1.attention.ops.triton_decode_attention",
     )
-
     for name in module_names:
         if name not in sys.modules:
             sys.modules[name] = types.ModuleType(name)
-
-    sys.modules["vllm.platforms"].current_platform = (
-        types.SimpleNamespace(
-            is_cuda_alike=lambda: True,
-        )
+    sys.modules["vllm.platforms"].current_platform = types.SimpleNamespace(
+        is_cuda_alike=lambda: True,
     )
-
     sys.modules["vllm.triton_utils"].tl = __import__(
         "triton.language",
         fromlist=["language"],
     )
     sys.modules["vllm.triton_utils"].triton = triton
-
     # The reference files import Stage2, but this harness calls Stage1 only.
-    sys.modules[
-        "vllm.v1.attention.ops.triton_decode_attention"
-    ]._fwd_kernel_stage2 = None
+    sys.modules["vllm.v1.attention.ops.triton_decode_attention"]._fwd_kernel_stage2 = None
 
 
 def _load_stage1(filename: str, module_name: str):
     _install_reference_import_stubs()
-
     spec = importlib.util.spec_from_file_location(
         module_name,
         REFERENCE_DIR / filename,
     )
-
     if spec is None or spec.loader is None:
         raise ImportError(f"Cannot load reference kernel {filename}")
-
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
@@ -109,17 +97,14 @@ def launch_aos_v1_stage1(
 ) -> None:
     B, Hq, D = q_rot.shape
     Hk = kv_cache.shape[2]
-
     assert D == HEAD_DIM
     assert Hk == NUM_KV_HEADS
     assert Hq // Hk == GQA_GROUP_SIZE
-
     grid = (
         B,
         Hq,
         NUM_KV_SPLITS,
     )
-
     _aos_stage1[grid](
         q_rot,
         kv_cache,
@@ -167,17 +152,14 @@ def launch_soa_v1_stage1(
 ) -> None:
     B, Hq, D = q_rot.shape
     Hk = kv_cache.shape[2]
-
     assert D == HEAD_DIM
     assert Hk == NUM_KV_HEADS
     assert Hq // Hk == GQA_GROUP_SIZE
-
     grid = (
         B,
         Hq,
         NUM_KV_SPLITS,
     )
-
     _soa_stage1[grid](
         q_rot,
         kv_cache,

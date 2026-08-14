@@ -99,10 +99,7 @@ KEY_DATA_BYTES = MSE_BYTES
 #
 # metadata 不放这里。
 
-DATA_BYTES_PER_SLOT = (
-    KEY_DATA_BYTES
-    + VAL_DATA_BYTES
-)
+DATA_BYTES_PER_SLOT = KEY_DATA_BYTES + VAL_DATA_BYTES
 
 
 # ============================================================
@@ -144,19 +141,14 @@ META_BYTES_PER_SLOT = NUM_SOA_FIELDS * 2
 #
 # = 134 B
 
-SLOT_SIZE = (
-    DATA_BYTES_PER_SLOT
-    + META_BYTES_PER_SLOT
-)
+SLOT_SIZE = DATA_BYTES_PER_SLOT + META_BYTES_PER_SLOT
 
 
 # upstream 要求 slot size 为偶数。
 #
 # 134 已经是偶数。
 
-SLOT_SIZE_ALIGNED = (
-    SLOT_SIZE + SLOT_SIZE % 2
-)
+SLOT_SIZE_ALIGNED = SLOT_SIZE + SLOT_SIZE % 2
 
 
 # ============================================================
@@ -192,11 +184,7 @@ SLOT_SIZE_ALIGNED = (
 # 16 * 8 * 128
 # = 16384 bytes
 
-DATA_REGION_BYTES = (
-    BLOCK_SIZE
-    * NUM_KV_HEADS
-    * DATA_BYTES_PER_SLOT
-)
+DATA_REGION_BYTES = BLOCK_SIZE * NUM_KV_HEADS * DATA_BYTES_PER_SLOT
 
 
 META_REGION_OFFSET = DATA_REGION_BYTES
@@ -211,12 +199,7 @@ META_REGION_OFFSET = DATA_REGION_BYTES
 #
 # = 768 B
 
-META_REGION_BYTES = (
-    NUM_KV_HEADS
-    * NUM_SOA_FIELDS
-    * BLOCK_SIZE
-    * 2
-)
+META_REGION_BYTES = NUM_KV_HEADS * NUM_SOA_FIELDS * BLOCK_SIZE * 2
 
 
 # Physical allocation仍然维持:
@@ -228,49 +211,36 @@ META_REGION_BYTES = (
 # 16 * 8 * 134
 # = 17152 B
 
-BLOCK_BYTES = (
-    BLOCK_SIZE
-    * NUM_KV_HEADS
-    * SLOT_SIZE_ALIGNED
-)
+BLOCK_BYTES = BLOCK_SIZE * NUM_KV_HEADS * SLOT_SIZE_ALIGNED
 
 
 # ============================================================
 # 6. Sequence / physical page counts
 # ============================================================
 
-BLOCKS_PER_SEQ = (
-    CONTEXT_LEN + BLOCK_SIZE - 1
-) // BLOCK_SIZE
+BLOCKS_PER_SEQ = (CONTEXT_LEN + BLOCK_SIZE - 1) // BLOCK_SIZE
 
 
-TOTAL_PHYSICAL_BLOCKS = (
-    BATCH_SIZE
-    * BLOCKS_PER_SEQ
-)
+TOTAL_PHYSICAL_BLOCKS = BATCH_SIZE * BLOCKS_PER_SEQ
 
 
 # ============================================================
 # 7. Pair LUT
 # ============================================================
 
+
 def build_pair_lut(
     centroids: torch.Tensor,
 ) -> torch.Tensor:
     """
     Same logical layout as upstream decode_v2.
-
     pair_lut[i, j] =
         [centroid[i], centroid[j]]
-
     For 4-bit:
-
         16 * 16 * 2 * 4 bytes
         = 2048 bytes
     """
-
     n = centroids.numel()
-
     lut = torch.empty(
         n,
         n,
@@ -278,12 +248,9 @@ def build_pair_lut(
         dtype=torch.float32,
         device=centroids.device,
     )
-
     c = centroids.float()
-
     lut[:, :, 0] = c[:, None]
     lut[:, :, 1] = c[None, :]
-
     return lut.reshape(
         n * n,
         2,
@@ -294,40 +261,32 @@ def build_pair_lut(
 # 8. block_table
 # ============================================================
 
+
 def build_block_table(
     device: torch.device,
 ) -> torch.Tensor:
     """
     第一版 baseline 使用最简单 physical layout:
-
         logical page == physical page
-
     Sequence 0:
         physical block 0 ... 255
-
     Sequence 1:
         physical block 256 ... 511
-
     ...
-
     shape:
         [B, BLOCKS_PER_SEQ]
-
     后续可以增加 random-page benchmark，
     测真正 paged/random access 对 L2/DRAM 的影响。
     """
-
     block_table = torch.arange(
         TOTAL_PHYSICAL_BLOCKS,
         dtype=torch.int32,
         device=device,
     )
-
     block_table = block_table.reshape(
         BATCH_SIZE,
         BLOCKS_PER_SEQ,
     )
-
     return block_table
 
 
@@ -335,10 +294,10 @@ def build_block_table(
 # 9. seq_lens
 # ============================================================
 
+
 def build_seq_lens(
     device: torch.device,
 ) -> torch.Tensor:
-
     return torch.full(
         (BATCH_SIZE,),
         CONTEXT_LEN,
@@ -351,14 +310,13 @@ def build_seq_lens(
 # 10. Rotated Query
 # ============================================================
 
+
 def build_query_rot(
     device: torch.device,
 ) -> torch.Tensor:
     """
     第一阶段只测试 TQ Decode Stage1。
-
     upstream launcher 中:
-
         query
           ↓
         query.float()
@@ -368,14 +326,10 @@ def build_query_rot(
         q_rot
           ↓
         Stage1
-
     现在我们直接 synthetic 生成 q_rot。
-
     所以 Q rotation GEMM 不计入第一阶段 kernel latency。
     """
-
     torch.manual_seed(1234)
-
     q_rot = torch.randn(
         BATCH_SIZE,
         NUM_Q_HEADS,
@@ -383,7 +337,6 @@ def build_query_rot(
         device=device,
         dtype=torch.float32,
     )
-
     return q_rot.contiguous()
 
 
@@ -391,22 +344,19 @@ def build_query_rot(
 # 11. Real Lloyd-Max centroids
 # ============================================================
 
+
 def build_centroids(
     device: torch.device,
 ) -> torch.Tensor:
     """
     centroid table 不随机。
-
     直接使用 upstream Lloyd-Max implementation:
-
         get_centroids(D=128, bits=4)
     """
-
     centroids = get_centroids(
         HEAD_DIM,
         MSE_BITS,
     )
-
     return centroids.to(
         device=device,
         dtype=torch.float32,
@@ -417,15 +367,14 @@ def build_centroids(
 # 12. Synthetic SoA KV Cache
 # ============================================================
 
+
 def build_synthetic_soa_kv_cache(
     device: torch.device,
 ) -> torch.Tensor:
     """
     构造 synthetic TurboQuant SoA KV Cache。
-
     数据的“值”无意义，
     但是下面这些必须完全正确:
-
       * allocation size
       * K/V packing byte region
       * metadata offset
@@ -433,27 +382,21 @@ def build_synthetic_soa_kv_cache(
       * metadata dtype
       * paged cache physical layout
 
-
     Physical PyTorch tensor shape:
-
         [num_blocks,
          block_size,
          num_kv_heads,
          slot_size_aligned]
 
-
     但 decode_v2 内部把每个 physical block
     看成一整块连续 bytes:
-
         DATA REGION
         +
         METADATA REGION
     """
-
     # --------------------------------------------------------
     # Allocate exact physical TQ cache size.
     # --------------------------------------------------------
-
     kv_cache = torch.empty(
         TOTAL_PHYSICAL_BLOCKS,
         BLOCK_SIZE,
@@ -462,8 +405,6 @@ def build_synthetic_soa_kv_cache(
         dtype=torch.uint8,
         device=device,
     )
-
-
     # --------------------------------------------------------
     # Flatten each physical block.
     #
@@ -471,13 +412,10 @@ def build_synthetic_soa_kv_cache(
     #
     # [num_blocks, BLOCK_BYTES]
     # --------------------------------------------------------
-
     block_bytes = kv_cache.view(
         TOTAL_PHYSICAL_BLOCKS,
         BLOCK_BYTES,
     )
-
-
     # --------------------------------------------------------
     # DATA REGION
     #
@@ -502,7 +440,6 @@ def build_synthetic_soa_kv_cache(
     #
     # perfectly exercises the real unpack path.
     # --------------------------------------------------------
-
     block_bytes[
         :,
         :DATA_REGION_BYTES,
@@ -510,8 +447,6 @@ def build_synthetic_soa_kv_cache(
         0,
         256,
     )
-
-
     # --------------------------------------------------------
     # Metadata region
     #
@@ -523,13 +458,7 @@ def build_synthetic_soa_kv_cache(
     #
     # which would poison attention softmax.
     # --------------------------------------------------------
-
-    block_bytes[
-        :,
-        META_REGION_OFFSET:
-    ].zero_()
-
-
+    block_bytes[:, META_REGION_OFFSET:].zero_()
     # --------------------------------------------------------
     # Generate valid K norm.
     #
@@ -542,7 +471,6 @@ def build_synthetic_soa_kv_cache(
     #
     # We only need finite positive FP16.
     # --------------------------------------------------------
-
     k_norm = (
         0.5
         + 1.5
@@ -554,14 +482,11 @@ def build_synthetic_soa_kv_cache(
             dtype=torch.float32,
         )
     ).to(torch.float16)
-
-
     # --------------------------------------------------------
     # V scale
     #
     # Must be positive.
     # --------------------------------------------------------
-
     v_scale = (
         0.01
         + 0.09
@@ -573,12 +498,9 @@ def build_synthetic_soa_kv_cache(
             dtype=torch.float32,
         )
     ).to(torch.float16)
-
-
     # --------------------------------------------------------
     # V zero / minimum
     # --------------------------------------------------------
-
     v_zero = (
         -0.5
         + torch.rand(
@@ -589,8 +511,6 @@ def build_synthetic_soa_kv_cache(
             dtype=torch.float32,
         )
     ).to(torch.float16)
-
-
     # --------------------------------------------------------
     # Reinterpret same KV cache memory as FP16.
     #
@@ -598,20 +518,11 @@ def build_synthetic_soa_kv_cache(
     #
     # divisible by 2.
     # --------------------------------------------------------
-
-    block_fp16 = kv_cache.view(
-        torch.float16
-    ).view(
+    block_fp16 = kv_cache.view(torch.float16).view(
         TOTAL_PHYSICAL_BLOCKS,
         BLOCK_BYTES // 2,
     )
-
-
-    meta_fp16_offset = (
-        META_REGION_OFFSET // 2
-    )
-
-
+    meta_fp16_offset = META_REGION_OFFSET // 2
     # --------------------------------------------------------
     # Metadata logical view:
     #
@@ -626,46 +537,17 @@ def build_synthetic_soa_kv_cache(
     # 1 -> V scale
     # 2 -> V zero
     # --------------------------------------------------------
-
     metadata = block_fp16[
-        :,
-        meta_fp16_offset:
-        meta_fp16_offset
-        + NUM_KV_HEADS
-        * NUM_SOA_FIELDS
-        * BLOCK_SIZE
+        :, meta_fp16_offset : meta_fp16_offset + NUM_KV_HEADS * NUM_SOA_FIELDS * BLOCK_SIZE
     ].view(
         TOTAL_PHYSICAL_BLOCKS,
         NUM_KV_HEADS,
         NUM_SOA_FIELDS,
         BLOCK_SIZE,
     )
-
-
-    metadata[
-        :,
-        :,
-        SOA_K_NORM,
-        :
-    ].copy_(k_norm)
-
-
-    metadata[
-        :,
-        :,
-        SOA_V_SCALE,
-        :
-    ].copy_(v_scale)
-
-
-    metadata[
-        :,
-        :,
-        SOA_V_ZERO,
-        :
-    ].copy_(v_zero)
-
-
+    metadata[:, :, SOA_K_NORM, :].copy_(k_norm)
+    metadata[:, :, SOA_V_SCALE, :].copy_(v_scale)
+    metadata[:, :, SOA_V_ZERO, :].copy_(v_zero)
     return kv_cache
 
 
@@ -674,28 +556,21 @@ def convert_soa_to_aos_kv_cache(
     centroids: torch.Tensor,
 ) -> torch.Tensor:
     """Convert the synthetic SoA cache to the equivalent AoS layout.
-
     SoA stores the norm-correction factor in the K norm. AoS V1 applies
     that correction while decoding, so its stored raw norm is reconstructed
     from the packed centroid indices. Both layouts then decode identical K/V.
     """
-
     assert soa_cache.shape == (
         TOTAL_PHYSICAL_BLOCKS,
         BLOCK_SIZE,
         NUM_KV_HEADS,
         SLOT_SIZE_ALIGNED,
     )
-
-    aos_cache = torch.empty_like(
-        soa_cache
-    )
-
+    aos_cache = torch.empty_like(soa_cache)
     soa_blocks = soa_cache.view(
         TOTAL_PHYSICAL_BLOCKS,
         BLOCK_BYTES,
     )
-
     soa_data = soa_blocks[
         :,
         :DATA_REGION_BYTES,
@@ -705,17 +580,12 @@ def convert_soa_to_aos_kv_cache(
         NUM_KV_HEADS,
         DATA_BYTES_PER_SLOT,
     )
-
     soa_meta = (
-        soa_cache
-        .view(torch.float16)
+        soa_cache.view(torch.float16)
         .view(
             TOTAL_PHYSICAL_BLOCKS,
             BLOCK_BYTES // 2,
-        )[
-            :,
-            META_REGION_OFFSET // 2:
-        ]
+        )[:, META_REGION_OFFSET // 2 :]
         .view(
             TOTAL_PHYSICAL_BLOCKS,
             NUM_KV_HEADS,
@@ -723,28 +593,18 @@ def convert_soa_to_aos_kv_cache(
             BLOCK_SIZE,
         )
     )
-
     # AoS slot: [K64 | K norm2 | V64 | V scale2 | V zero2].
-    aos_cache[..., :MSE_BYTES].copy_(
-        soa_data[..., :MSE_BYTES]
-    )
-
+    aos_cache[..., :MSE_BYTES].copy_(soa_data[..., :MSE_BYTES])
     aos_cache[
         ...,
-        MSE_BYTES + 2:
-        MSE_BYTES + 2 + VAL_DATA_BYTES,
+        MSE_BYTES + 2 : MSE_BYTES + 2 + VAL_DATA_BYTES,
     ].copy_(
         soa_data[
             ...,
-            KEY_DATA_BYTES:
-            KEY_DATA_BYTES + VAL_DATA_BYTES,
+            KEY_DATA_BYTES : KEY_DATA_BYTES + VAL_DATA_BYTES,
         ]
     )
-
-    aos_half = aos_cache.view(
-        torch.float16
-    )
-
+    aos_half = aos_cache.view(torch.float16)
     aos_half[..., 65].copy_(
         soa_meta[
             :,
@@ -753,7 +613,6 @@ def convert_soa_to_aos_kv_cache(
             :,
         ].permute(0, 2, 1)
     )
-
     aos_half[..., 66].copy_(
         soa_meta[
             :,
@@ -762,10 +621,8 @@ def convert_soa_to_aos_kv_cache(
             :,
         ].permute(0, 2, 1)
     )
-
     # Reconstruct the raw norm expected by AoS V1 in bounded chunks.
     chunk_blocks = 128
-
     for start in range(
         0,
         TOTAL_PHYSICAL_BLOCKS,
@@ -775,21 +632,13 @@ def convert_soa_to_aos_kv_cache(
             start + chunk_blocks,
             TOTAL_PHYSICAL_BLOCKS,
         )
-
         packed = soa_data[
             start:end,
             ...,
             :MSE_BYTES,
         ]
-
-        lo = (
-            packed & 0xF
-        ).to(torch.long)
-
-        hi = (
-            (packed >> 4) & 0xF
-        ).to(torch.long)
-
+        lo = (packed & 0xF).to(torch.long)
+        hi = ((packed >> 4) & 0xF).to(torch.long)
         indices = torch.stack(
             [lo, hi],
             dim=-1,
@@ -799,30 +648,27 @@ def convert_soa_to_aos_kv_cache(
             NUM_KV_HEADS,
             HEAD_DIM,
         )
-
         centroid_norm = torch.linalg.vector_norm(
             centroids[indices],
             dim=-1,
         )
-
-        folded_norm = soa_meta[
-            start:end,
-            :,
-            SOA_K_NORM,
-            :,
-        ].permute(0, 2, 1).float()
-
-        raw_norm = (
-            folded_norm * centroid_norm
-        ).to(torch.float16)
-
+        folded_norm = (
+            soa_meta[
+                start:end,
+                :,
+                SOA_K_NORM,
+                :,
+            ]
+            .permute(0, 2, 1)
+            .float()
+        )
+        raw_norm = (folded_norm * centroid_norm).to(torch.float16)
         # K norm occupies bytes 64:66, i.e. FP16 slot 32.
         aos_half[
             start:end,
             ...,
             MSE_BYTES // 2,
         ].copy_(raw_norm)
-
     return aos_cache
 
 
@@ -830,32 +676,16 @@ def convert_soa_to_aos_kv_cache(
 # 13. Build all inputs
 # ============================================================
 
+
 def build_inputs(
     device: torch.device,
 ):
-
     q_rot = build_query_rot(device)
-
-    kv_cache = build_synthetic_soa_kv_cache(
-        device
-    )
-
-    block_table = build_block_table(
-        device
-    )
-
-    seq_lens = build_seq_lens(
-        device
-    )
-
-    centroids = build_centroids(
-        device
-    )
-
-    pair_lut = build_pair_lut(
-        centroids
-    )
-
+    kv_cache = build_synthetic_soa_kv_cache(device)
+    block_table = build_block_table(device)
+    seq_lens = build_seq_lens(device)
+    centroids = build_centroids(device)
+    pair_lut = build_pair_lut(centroids)
     return {
         "q_rot": q_rot,
         "kv_cache": kv_cache,
@@ -870,71 +700,53 @@ def build_inputs(
 # 14. Print configuration
 # ============================================================
 
-def print_config():
 
+def print_config():
     print("TurboQuant 4bit_nc Synthetic Benchmark")
     print()
-
     print("Preset              : turboquant_4bit_nc")
-
     print()
-
     print("Batch               :", BATCH_SIZE)
     print("Context             :", CONTEXT_LEN)
-
     print("Q heads             :", NUM_Q_HEADS)
     print("KV heads            :", NUM_KV_HEADS)
     print("GQA group           :", GQA_GROUP_SIZE)
     print("Head dim            :", HEAD_DIM)
-
     print()
-
     print("MSE bits            :", MSE_BITS)
     print("Value bits          :", VALUE_BITS)
     print("Norm correction     :", NORM_CORRECTION)
-
     print()
-
     print("K packed bytes      :", KEY_DATA_BYTES)
     print("V packed bytes      :", VAL_DATA_BYTES)
-
     print("Logical slot bytes  :", SLOT_SIZE)
     print("Aligned slot bytes  :", SLOT_SIZE_ALIGNED)
-
     print()
-
     print("KV block size       :", BLOCK_SIZE)
     print("Blocks / sequence   :", BLOCKS_PER_SEQ)
     print("Physical blocks     :", TOTAL_PHYSICAL_BLOCKS)
-
     print()
-
     print(
         "Data region / block :",
         DATA_REGION_BYTES,
         "bytes",
     )
-
     print(
         "Meta region / block :",
         META_REGION_BYTES,
         "bytes",
     )
-
     print(
         "Meta region offset  :",
         META_REGION_OFFSET,
         "bytes",
     )
-
     print(
         "Total bytes / block :",
         BLOCK_BYTES,
         "bytes",
     )
-
     print()
-
     print("KV splits           :", NUM_KV_SPLITS)
 
 
@@ -942,213 +754,131 @@ def print_config():
 # 15. Self-test
 # ============================================================
 
-def main():
 
+def main():
     # --------------------------------------------------------
     # Static layout checks
     # --------------------------------------------------------
-
     assert NUM_Q_HEADS % NUM_KV_HEADS == 0
-
     assert GQA_GROUP_SIZE == 4
-
     assert MSE_BYTES == 64
-
     assert VAL_DATA_BYTES == 64
-
     assert DATA_BYTES_PER_SLOT == 128
-
     assert SLOT_SIZE == 134
-
     assert SLOT_SIZE_ALIGNED == 134
-
     assert DATA_REGION_BYTES == 16384
-
     assert META_REGION_BYTES == 768
-
     assert META_REGION_OFFSET == 16384
-
     assert BLOCK_BYTES == 17152
-
-    assert (
-        DATA_REGION_BYTES
-        + META_REGION_BYTES
-        == BLOCK_BYTES
-    )
-
+    assert DATA_REGION_BYTES + META_REGION_BYTES == BLOCK_BYTES
     assert BLOCKS_PER_SEQ == 256
-
     assert TOTAL_PHYSICAL_BLOCKS == 16384
-
-
     # --------------------------------------------------------
     # GPU
     # --------------------------------------------------------
-
     device = torch.device("cuda")
-
     print(
         "GPU                  :",
         torch.cuda.get_device_name(0),
     )
-
     print(
         "Compute Capability   :",
         torch.cuda.get_device_capability(0),
     )
-
     print()
-
     print_config()
-
     print()
-
     print("Building synthetic inputs...")
-
-
     inputs = build_inputs(device)
-
-
     torch.cuda.synchronize()
-
-
     # --------------------------------------------------------
     # Shape checks
     # --------------------------------------------------------
-
     print()
-
     print("Input Shapes")
-
     print(
         "q_rot       :",
         tuple(inputs["q_rot"].shape),
         inputs["q_rot"].dtype,
     )
-
     print(
         "kv_cache    :",
         tuple(inputs["kv_cache"].shape),
         inputs["kv_cache"].dtype,
     )
-
     print(
         "block_table :",
         tuple(inputs["block_table"].shape),
         inputs["block_table"].dtype,
     )
-
     print(
         "seq_lens    :",
         tuple(inputs["seq_lens"].shape),
         inputs["seq_lens"].dtype,
     )
-
     print(
         "centroids   :",
         tuple(inputs["centroids"].shape),
         inputs["centroids"].dtype,
     )
-
     print(
         "pair_lut    :",
         tuple(inputs["pair_lut"].shape),
         inputs["pair_lut"].dtype,
     )
-
-
     # --------------------------------------------------------
     # Memory
     # --------------------------------------------------------
-
-    kv_bytes = (
-        inputs["kv_cache"].numel()
-        * inputs["kv_cache"].element_size()
-    )
-
+    kv_bytes = inputs["kv_cache"].numel() * inputs["kv_cache"].element_size()
     print()
-
     print(
         "KV Cache bytes       :",
         kv_bytes,
     )
-
     print(
         "KV Cache MiB         :",
         f"{kv_bytes / (1024 ** 2):.2f}",
     )
-
-
     # --------------------------------------------------------
     # Finite checks
     # --------------------------------------------------------
-
     print()
-
     print("Finite Checks")
-
     print(
         "q_rot finite         :",
-        bool(
-            torch.isfinite(
-                inputs["q_rot"]
-            ).all().item()
-        ),
+        bool(torch.isfinite(inputs["q_rot"]).all().item()),
     )
-
     print(
         "centroids finite     :",
-        bool(
-            torch.isfinite(
-                inputs["centroids"]
-            ).all().item()
-        ),
+        bool(torch.isfinite(inputs["centroids"]).all().item()),
     )
-
     print(
         "pair LUT finite      :",
-        bool(
-            torch.isfinite(
-                inputs["pair_lut"]
-            ).all().item()
-        ),
+        bool(torch.isfinite(inputs["pair_lut"]).all().item()),
     )
-
-
     # --------------------------------------------------------
     # block_table sanity
     # --------------------------------------------------------
-
     print()
-
     print("Block Table Sanity")
-
     print(
         "seq0 first block     :",
         inputs["block_table"][0, 0].item(),
     )
-
     print(
         "seq0 last block      :",
         inputs["block_table"][0, -1].item(),
     )
-
     print(
         "seq1 first block     :",
         inputs["block_table"][1, 0].item(),
     )
-
     print(
         "seq1 last block      :",
         inputs["block_table"][1, -1].item(),
     )
-
-
     print()
-
-    print(
-        "Synthetic SoA input generation: OK"
-    )
+    print("Synthetic SoA input generation: OK")
 
 
 if __name__ == "__main__":

@@ -57,7 +57,6 @@ def fp32_attention_sequence(
     value: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Canonical GQA attention for one sequence before KV quantization."""
-
     q = query.float()
     kv_head = torch.arange(NUM_Q_HEADS, device=query.device) // GQA_GROUP_SIZE
     k = key[:, kv_head, :].float().permute(1, 0, 2)
@@ -71,9 +70,7 @@ def fp32_attention_sequence(
 def check_store_metadata(kv_cache: torch.Tensor) -> None:
     metadata = (
         kv_cache.view(torch.float16)
-        .view(TOTAL_PHYSICAL_BLOCKS, BLOCK_BYTES // 2)[
-            :, META_REGION_OFFSET // 2:
-        ]
+        .view(TOTAL_PHYSICAL_BLOCKS, BLOCK_BYTES // 2)[:, META_REGION_OFFSET // 2 :]
         .view(
             TOTAL_PHYSICAL_BLOCKS,
             NUM_KV_HEADS,
@@ -94,17 +91,14 @@ def main():
     args = parse_args()
     if args.store_chunk_tokens <= 0:
         raise ValueError("--store-chunk-tokens must be positive")
-
     device = torch.device("cuda")
     print("GPU:", torch.cuda.get_device_name(0))
     print("Building raw Q/K/V and writing cache with vLLM SoA Store...")
-
     torch.manual_seed(20260814)
     rotation = build_hadamard(device)
     centroids = build_centroids(device)
     midpoints = ((centroids[:-1] + centroids[1:]) * 0.5).contiguous()
     pair_lut = build_pair_lut(centroids)
-
     kv_cache = torch.empty(
         TOTAL_PHYSICAL_BLOCKS,
         BLOCK_SIZE,
@@ -116,7 +110,6 @@ def main():
     total_tokens = BATCH_SIZE * CONTEXT_LEN
     reference_key = None
     reference_value = None
-
     for start in range(0, total_tokens, args.store_chunk_tokens):
         end = min(start + args.store_chunk_tokens, total_tokens)
         count = end - start
@@ -131,7 +124,6 @@ def main():
         if start == 0:
             reference_key = key[:CONTEXT_LEN].clone()
             reference_value = value[:CONTEXT_LEN].clone()
-
         slot_mapping = torch.arange(
             start,
             end,
@@ -147,12 +139,10 @@ def main():
             midpoints,
             centroids,
         )
-
     torch.cuda.synchronize()
     if reference_key is None or reference_value is None:
         raise RuntimeError("Failed to retain the first sequence")
     check_store_metadata(kv_cache)
-
     query = torch.randn(
         BATCH_SIZE,
         NUM_Q_HEADS,
@@ -163,7 +153,6 @@ def main():
     q_rot = torch.matmul(query.float(), rotation).contiguous()
     block_table = build_block_table(device)
     seq_lens = build_seq_lens(device)
-
     mid_shape = (
         BATCH_SIZE,
         NUM_Q_HEADS,
@@ -187,7 +176,6 @@ def main():
         device=device,
     )
     lse_cuda = torch.empty_like(lse_triton)
-
     cuda_ext = build_cuda_v7_extension()
     print("Running Triton V2-fixed and CUDA V7 on the Store-generated cache...")
     launch_tq4_v2_stage1(
@@ -210,14 +198,12 @@ def main():
         out_cuda,
         lse_cuda,
     )
-
     fp32_output, fp32_lse = fp32_attention_sequence(
         query[0],
         reference_key,
         reference_value,
     )
     torch.cuda.synchronize()
-
     for name, tensor in (
         ("Triton output", out_triton),
         ("Triton LSE", lse_triton),
@@ -228,36 +214,20 @@ def main():
     ):
         if not bool(torch.isfinite(tensor).all()):
             raise RuntimeError(f"{name} produced NaN/Inf")
-
     print()
     print("Store -> Decode correctness")
     out_max, out_mean = diff_stats(out_triton, out_cuda)
     lse_max, lse_mean = diff_stats(lse_triton, lse_cuda)
-    print(
-        "CUDA V7 vs Triton output max/mean: "
-        f"{out_max:.8g} / {out_mean:.8g}"
-    )
-    print(
-        "CUDA V7 vs Triton LSE    max/mean: "
-        f"{lse_max:.8g} / {lse_mean:.8g}"
-    )
+    print("CUDA V7 vs Triton output max/mean: " f"{out_max:.8g} / {out_mean:.8g}")
+    print("CUDA V7 vs Triton LSE    max/mean: " f"{lse_max:.8g} / {lse_mean:.8g}")
     if out_max > 1e-4 or lse_max > 1e-4:
-        raise RuntimeError(
-            "CUDA V7 does not match Triton on the Store-generated cache"
-        )
-
+        raise RuntimeError("CUDA V7 does not match Triton on the Store-generated cache")
     print()
     print("Quantized decode vs original FP32 attention (sequence 0)")
     out_max, out_mean = diff_stats(fp32_output, out_triton[0])
     lse_max, lse_mean = diff_stats(fp32_lse, lse_triton[0])
-    print(
-        "Triton quantization output max/mean: "
-        f"{out_max:.8g} / {out_mean:.8g}"
-    )
-    print(
-        "Triton quantization LSE    max/mean: "
-        f"{lse_max:.8g} / {lse_mean:.8g}"
-    )
+    print("Triton quantization output max/mean: " f"{out_max:.8g} / {out_mean:.8g}")
+    print("Triton quantization LSE    max/mean: " f"{lse_max:.8g} / {lse_mean:.8g}")
 
 
 if __name__ == "__main__":

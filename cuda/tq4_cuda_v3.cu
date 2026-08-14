@@ -39,12 +39,10 @@ __device__ __forceinline__ float warp_sum(float x) {
     return x;
 }
 
-__device__ __forceinline__ float load_meta(
-    const uint8_t* cache, int64_t base, int kvh, int field, int pos
-) {
+__device__ __forceinline__ float load_meta(const uint8_t *cache, int64_t base, int kvh, int field,
+                                           int pos) {
     const int i = (kvh * NUM_FIELDS + field) * BLOCK_SIZE + pos;
-    return __half2float(*reinterpret_cast<const __half*>(
-        cache + base + META_OFFSET + i * 2));
+    return __half2float(*reinterpret_cast<const __half *>(cache + base + META_OFFSET + i * 2));
 }
 
 union WmmaScratch {
@@ -53,27 +51,21 @@ union WmmaScratch {
 };
 
 __global__ __launch_bounds__(THREADS) void tq4_cuda_v3_kernel(
-    const float* __restrict__ q_rot,
-    const uint8_t* __restrict__ cache,
-    const int32_t* __restrict__ block_table,
-    const int32_t* __restrict__ seq_lens,
-    const float* __restrict__ centroids,
-    float* __restrict__ mid_o,
-    int batch_size,
-    int blocks_per_seq,
-    int64_t cache_stride
-) {
+    const float *__restrict__ q_rot, const uint8_t *__restrict__ cache,
+    const int32_t *__restrict__ block_table, const int32_t *__restrict__ seq_lens,
+    const float *__restrict__ centroids, float *__restrict__ mid_o, int batch_size,
+    int blocks_per_seq, int64_t cache_stride) {
     const int b = blockIdx.x, kvh = blockIdx.y, sid = blockIdx.z;
     const int tid = threadIdx.x, warp = tid >> 5, lane = tid & 31;
-    if (b >= batch_size) return;
-
+    if (b >= batch_size)
+        return;
     const int seq_len = seq_lens[b];
     const int split_len = (seq_len + NUM_SPLITS - 1) / NUM_SPLITS;
     const int split_start = sid * split_len;
     const int split_end = min(split_start + split_len, seq_len);
     const int token_count = split_end - split_start;
-    if (token_count <= 0 || token_count > MAX_TOKENS) return;
-
+    if (token_count <= 0 || token_count > MAX_TOKENS)
+        return;
     __shared__ __align__(32) __half q_s[TILE][HEAD_DIM];
     __shared__ __align__(32) __half k_s[TILE][HEAD_DIM];
     __shared__ __align__(32) __half v_s[TILE][HEAD_DIM];
@@ -83,22 +75,19 @@ __global__ __launch_bounds__(THREADS) void tq4_cuda_v3_kernel(
     __shared__ float k_norm[TILE], v_scale[TILE], v_zero[TILE];
     __shared__ float tile_alpha[TILE];
     __shared__ float split_lse[GQA], split_inv_l[GQA];
-
     for (int i = tid; i < TILE * HEAD_DIM; i += THREADS) {
         const int row = i / HEAD_DIM, d = i % HEAD_DIM;
         float value = 0.0f;
         if (row < GQA) {
             const int qh = kvh * GQA + row;
-            value = q_rot[(static_cast<int64_t>(b) * Q_HEADS + qh)
-                          * HEAD_DIM + d];
+            value = q_rot[(static_cast<int64_t>(b) * Q_HEADS + qh) * HEAD_DIM + d];
         }
         q_s[row][d] = __float2half(value);
     }
     for (int i = tid; i < TILE * TILE; i += THREADS) {
-        reinterpret_cast<__half*>(p_s)[i] = __float2half(0.0f);
+        reinterpret_cast<__half *>(p_s)[i] = __float2half(0.0f);
     }
     __syncthreads();
-
     // Single-pass online softmax. WMMA accumulator row ownership on sm_86:
     // row = lane / 4 + ((fragment_element & 2) ? 8 : 0).
     wmma::fragment<wmma::accumulator, 16, 16, 16, float> out0, out1;
@@ -106,18 +95,16 @@ __global__ __launch_bounds__(THREADS) void tq4_cuda_v3_kernel(
     wmma::fill_fragment(out1, 0.0f);
     float running_m = -CUDART_INF_F;
     float running_l = 0.0f;
-
     for (int tile = 0; tile < token_count; tile += TILE) {
         if (tid < TILE) {
             const int local = tile + tid;
             if (local < token_count) {
                 const int token = split_start + local;
                 const int page = token / BLOCK_SIZE, pos = token % BLOCK_SIZE;
-                const int block = block_table[
-                    static_cast<int64_t>(b) * blocks_per_seq + page];
+                const int block = block_table[static_cast<int64_t>(b) * blocks_per_seq + page];
                 const int64_t base = static_cast<int64_t>(block) * cache_stride;
-                data_base[tid] = base + static_cast<int64_t>(pos)
-                    * KV_HEADS * DATA_BYTES + static_cast<int64_t>(kvh) * DATA_BYTES;
+                data_base[tid] = base + static_cast<int64_t>(pos) * KV_HEADS * DATA_BYTES +
+                                 static_cast<int64_t>(kvh) * DATA_BYTES;
                 k_norm[tid] = load_meta(cache, base, kvh, K_NORM, pos);
                 v_scale[tid] = load_meta(cache, base, kvh, V_SCALE, pos);
                 v_zero[tid] = load_meta(cache, base, kvh, V_ZERO, pos);
@@ -127,7 +114,6 @@ __global__ __launch_bounds__(THREADS) void tq4_cuda_v3_kernel(
             }
         }
         __syncthreads();
-
         for (int i = tid; i < TILE * K_BYTES; i += THREADS) {
             const int t = i / K_BYTES, byte = i % K_BYTES;
             uint8_t packed_k = 0, packed_v = 0;
@@ -142,39 +128,35 @@ __global__ __launch_bounds__(THREADS) void tq4_cuda_v3_kernel(
             v_s[t][d + 1] = __float2half((packed_v >> 4) * v_scale[t] + v_zero[t]);
         }
         __syncthreads();
-
         if (warp == 0) {
             wmma::fragment<wmma::accumulator, 16, 16, 16, float> qk;
             wmma::fill_fragment(qk, 0.0f);
 #pragma unroll
             for (int k = 0; k < HEAD_DIM; k += 16) {
-                wmma::fragment<wmma::matrix_a, 16, 16, 16, __half,
-                               wmma::row_major> qf;
-                wmma::fragment<wmma::matrix_b, 16, 16, 16, __half,
-                               wmma::col_major> kf;
+                wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::row_major> qf;
+                wmma::fragment<wmma::matrix_b, 16, 16, 16, __half, wmma::col_major> kf;
                 wmma::load_matrix_sync(qf, &q_s[0][k], HEAD_DIM);
                 wmma::load_matrix_sync(kf, &k_s[0][k], HEAD_DIM);
                 wmma::mma_sync(qk, qf, kf, qk);
             }
-            wmma::store_matrix_sync(&scratch.qk[0][0], qk, TILE,
-                                    wmma::mem_row_major);
+            wmma::store_matrix_sync(&scratch.qk[0][0], qk, TILE, wmma::mem_row_major);
         }
         __syncthreads();
-
         float score = -CUDART_INF_F;
         if (warp < GQA && lane < TILE && tile + lane < token_count) {
             score = scratch.qk[warp][lane] * ATTN_SCALE * RCP_LN2;
         }
         const float tile_m = __shfl_sync(FULL_MASK, warp_max(score), 0);
         const float new_m = fmaxf(running_m, tile_m);
-        const float alpha = running_l == 0.0f
-            ? 0.0f : exp2f(running_m - new_m);
+        const float alpha = running_l == 0.0f ? 0.0f : exp2f(running_m - new_m);
         const float p = lane < TILE ? exp2f(score - new_m) : 0.0f;
         const float tile_l = __shfl_sync(FULL_MASK, warp_sum(p), 0);
         running_l = running_l * alpha + tile_l;
         running_m = new_m;
-        if (warp < GQA && lane < TILE) p_s[warp][lane] = __float2half(p);
-        if (lane == 0) tile_alpha[warp] = warp < GQA ? alpha : 0.0f;
+        if (warp < GQA && lane < TILE)
+            p_s[warp][lane] = __float2half(p);
+        if (lane == 0)
+            tile_alpha[warp] = warp < GQA ? alpha : 0.0f;
         __syncthreads();
 
 #pragma unroll
@@ -184,11 +166,8 @@ __global__ __launch_bounds__(THREADS) void tq4_cuda_v3_kernel(
             out0.x[i] *= row_alpha;
             out1.x[i] *= row_alpha;
         }
-
-        wmma::fragment<wmma::matrix_a, 16, 16, 16, __half,
-                       wmma::row_major> pf;
-        wmma::fragment<wmma::matrix_b, 16, 16, 16, __half,
-                       wmma::row_major> vf;
+        wmma::fragment<wmma::matrix_a, 16, 16, 16, __half, wmma::row_major> pf;
+        wmma::fragment<wmma::matrix_b, 16, 16, 16, __half, wmma::row_major> vf;
         wmma::load_matrix_sync(pf, &p_s[0][0], TILE);
         const int col = warp * 32;
         wmma::load_matrix_sync(vf, &v_s[0][col], HEAD_DIM);
@@ -197,34 +176,29 @@ __global__ __launch_bounds__(THREADS) void tq4_cuda_v3_kernel(
         wmma::mma_sync(out1, pf, vf, out1);
         __syncthreads();
     }
-
     if (lane == 0) {
         split_inv_l[warp] = 1.0f / running_l;
         split_lse[warp] = running_m * LN2 + logf(running_l);
     }
-
     const int col = warp * 32;
-    wmma::store_matrix_sync(&scratch.output[0][col], out0, HEAD_DIM,
-                            wmma::mem_row_major);
-    wmma::store_matrix_sync(&scratch.output[0][col + 16], out1, HEAD_DIM,
-                            wmma::mem_row_major);
+    wmma::store_matrix_sync(&scratch.output[0][col], out0, HEAD_DIM, wmma::mem_row_major);
+    wmma::store_matrix_sync(&scratch.output[0][col + 16], out1, HEAD_DIM, wmma::mem_row_major);
     __syncthreads();
-
     const int64_t head_stride = static_cast<int64_t>(NUM_SPLITS) * (HEAD_DIM + 1);
     for (int q = 0; q < GQA; ++q) {
         const int qh = kvh * GQA + q;
-        const int64_t out = (static_cast<int64_t>(b) * Q_HEADS + qh)
-            * head_stride + static_cast<int64_t>(sid) * (HEAD_DIM + 1);
+        const int64_t out = (static_cast<int64_t>(b) * Q_HEADS + qh) * head_stride +
+                            static_cast<int64_t>(sid) * (HEAD_DIM + 1);
         mid_o[out + tid] = scratch.output[q][tid] * split_inv_l[q];
-        if (tid == 0) mid_o[out + HEAD_DIM] = split_lse[q];
+        if (tid == 0)
+            mid_o[out + HEAD_DIM] = split_lse[q];
     }
 }
-}  // namespace
+} // namespace
 
-torch::Tensor tq4_cuda_v3_cuda(
-    torch::Tensor q_rot, torch::Tensor kv_cache, torch::Tensor block_table,
-    torch::Tensor seq_lens, torch::Tensor centroids, torch::Tensor mid_o
-) {
+torch::Tensor tq4_cuda_v3_cuda(torch::Tensor q_rot, torch::Tensor kv_cache,
+                               torch::Tensor block_table, torch::Tensor seq_lens,
+                               torch::Tensor centroids, torch::Tensor mid_o) {
     TORCH_CHECK(q_rot.is_cuda() && q_rot.is_contiguous(), "invalid q_rot");
     TORCH_CHECK(kv_cache.is_cuda() && kv_cache.is_contiguous(), "invalid cache");
     TORCH_CHECK(block_table.is_cuda() && block_table.is_contiguous(), "invalid block table");
@@ -237,19 +211,18 @@ torch::Tensor tq4_cuda_v3_cuda(
     TORCH_CHECK(seq_lens.scalar_type() == torch::kInt32, "seq_lens must be int32");
     TORCH_CHECK(centroids.scalar_type() == torch::kFloat32, "centroids must be fp32");
     TORCH_CHECK(mid_o.scalar_type() == torch::kFloat32, "mid_o must be fp32");
-    TORCH_CHECK(q_rot.size(1) == Q_HEADS && q_rot.size(2) == HEAD_DIM,
-                "requires Hq=32,D=128");
-    TORCH_CHECK(kv_cache.size(1) == BLOCK_SIZE && kv_cache.size(2) == KV_HEADS
-                && kv_cache.size(3) == SLOT_SIZE, "requires cache [blocks,16,8,134]");
+    TORCH_CHECK(q_rot.size(1) == Q_HEADS && q_rot.size(2) == HEAD_DIM, "requires Hq=32,D=128");
+    TORCH_CHECK(kv_cache.size(1) == BLOCK_SIZE && kv_cache.size(2) == KV_HEADS &&
+                    kv_cache.size(3) == SLOT_SIZE,
+                "requires cache [blocks,16,8,134]");
     const int B = q_rot.size(0);
-    TORCH_CHECK(mid_o.sizes() == torch::IntArrayRef(
-        {B, Q_HEADS, NUM_SPLITS, HEAD_DIM + 1}), "invalid mid_o shape");
+    TORCH_CHECK(mid_o.sizes() == torch::IntArrayRef({B, Q_HEADS, NUM_SPLITS, HEAD_DIM + 1}),
+                "invalid mid_o shape");
     c10::cuda::CUDAGuard guard(q_rot.device());
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     tq4_cuda_v3_kernel<<<dim3(B, KV_HEADS, NUM_SPLITS), THREADS, 0, stream>>>(
-        q_rot.data_ptr<float>(), kv_cache.data_ptr<uint8_t>(),
-        block_table.data_ptr<int32_t>(), seq_lens.data_ptr<int32_t>(),
-        centroids.data_ptr<float>(), mid_o.data_ptr<float>(), B,
+        q_rot.data_ptr<float>(), kv_cache.data_ptr<uint8_t>(), block_table.data_ptr<int32_t>(),
+        seq_lens.data_ptr<int32_t>(), centroids.data_ptr<float>(), mid_o.data_ptr<float>(), B,
         block_table.size(1), kv_cache.stride(0));
     C10_CUDA_KERNEL_LAUNCH_CHECK();
     return mid_o;
