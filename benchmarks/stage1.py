@@ -7,7 +7,7 @@ from pathlib import Path
 import torch
 from torch.utils.cpp_extension import load
 
-from tq4_common import (
+from baseline.common import (
     BATCH_SIZE,
     HEAD_DIM,
     NUM_KV_SPLITS,
@@ -15,11 +15,11 @@ from tq4_common import (
     build_inputs,
     convert_soa_to_aos_kv_cache,
 )
-from tq4_v1_stage1 import (
+from baseline.triton_v1 import (
     launch_aos_v1_stage1,
     launch_soa_v1_stage1,
 )
-from tq4_v2_stage1 import launch_tq4_v2_stage1
+from baseline.triton_v2 import launch_tq4_v2_stage1
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -219,7 +219,7 @@ def main():
     cuda_ext = None
 
     if args.include_cuda:
-        from bench_cuda_v1 import build_extension
+        from tools.cuda_v1_diagnostic import build_extension
 
         cuda_ext = build_extension()
 

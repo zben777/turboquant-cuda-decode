@@ -12,7 +12,7 @@ import torch
 
 from torch.utils.cpp_extension import load
 
-from tq4_common import (
+from baseline.common import (
     BATCH_SIZE,
     NUM_Q_HEADS,
     NUM_KV_HEADS,
@@ -21,7 +21,7 @@ from tq4_common import (
     build_inputs,
 )
 
-from tq4_v2_stage1 import (
+from baseline.triton_v2 import (
     launch_tq4_v2_stage1,
 )
 

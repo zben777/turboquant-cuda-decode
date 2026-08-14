@@ -3,20 +3,20 @@ import statistics
 
 import torch
 
-from bench_triton_baselines import (
+from .stage1 import (
     build_cuda_v7_extension,
     diff_stats,
     event_time_ms,
 )
-from tq4_common import (
+from baseline.common import (
     BATCH_SIZE,
     HEAD_DIM,
     NUM_KV_SPLITS,
     NUM_Q_HEADS,
     build_inputs,
 )
-from tq4_stage2 import launch_stage2
-from tq4_v2_stage1 import launch_tq4_v2_stage1
+from baseline.stage2 import launch_stage2
+from baseline.triton_v2 import launch_tq4_v2_stage1
 
 
 def parse_args():

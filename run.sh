@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON_BIN="${PYTHON:-python}"
 
 stage1_cuda_flags=(
@@ -17,7 +16,7 @@ stage1_cuda_flags=(
 
 usage() {
   cat <<'EOF'
-Usage: ./baseline/run.sh MODE
+Usage: ./run.sh MODE
 
 Modes:
   check       Parse every Python source file; no GPU work.
@@ -40,36 +39,42 @@ run_check() {
   PYTHONPYCACHEPREFIX="${TMPDIR:-/tmp}/turboquant_cuda_pycache" \
     "${PYTHON_BIN}" -m compileall -q \
     "${PROJECT_ROOT}/baseline" \
+    "${PROJECT_ROOT}/benchmarks" \
+    "${PROJECT_ROOT}/validation" \
+    "${PROJECT_ROOT}/tools" \
     "${PROJECT_ROOT}/reference" \
     "${PROJECT_ROOT}/vllm"
 }
 
 run_layout() {
   echo "== Fixed-layout self-test =="
-  "${PYTHON_BIN}" -B "${SCRIPT_DIR}/tq4_common.py"
+  (cd "${PROJECT_ROOT}" && "${PYTHON_BIN}" -B -m baseline.common)
 }
 
 run_smoke() {
   run_check
   echo "== Short Stage1 regression =="
-  "${PYTHON_BIN}" -B "${SCRIPT_DIR}/bench_triton_baselines.py" \
+  (cd "${PROJECT_ROOT}" && "${PYTHON_BIN}" -B -m benchmarks.stage1 \
     --include-cuda-v7 --warmup 3 --iters 10 --rounds 1
+  )
   echo "== Short Full Decode regression =="
-  "${PYTHON_BIN}" -B "${SCRIPT_DIR}/bench_full_decode.py" \
+  (cd "${PROJECT_ROOT}" && "${PYTHON_BIN}" -B -m benchmarks.full_decode \
     --warmup 3 --iters 10 --rounds 1
+  )
 }
 
 run_store() {
   echo "== Real SoA Store compatibility =="
-  "${PYTHON_BIN}" -B "${SCRIPT_DIR}/bench_store_decode.py"
+  (cd "${PROJECT_ROOT}" && "${PYTHON_BIN}" -B -m validation.store_decode)
 }
 
 run_benchmark() {
   echo "== Official Stage1 benchmark =="
-  "${PYTHON_BIN}" -B "${SCRIPT_DIR}/bench_triton_baselines.py" \
+  (cd "${PROJECT_ROOT}" && "${PYTHON_BIN}" -B -m benchmarks.stage1 \
     "${stage1_cuda_flags[@]}"
+  )
   echo "== Official Full Decode benchmark =="
-  "${PYTHON_BIN}" -B "${SCRIPT_DIR}/bench_full_decode.py"
+  (cd "${PROJECT_ROOT}" && "${PYTHON_BIN}" -B -m benchmarks.full_decode)
 }
 
 run_clean() {

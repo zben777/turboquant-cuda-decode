@@ -1,14 +1,12 @@
-# Reference Snapshots
+# Reference 快照
 
-This directory contains unmodified, flat snapshots of selected TurboQuant
-files extracted from vLLM. The standalone benchmark imports these files
-without requiring the rest of vLLM.
+本目录保存从 vLLM 摘取的部分 TurboQuant 文件的扁平、未经修改的快照。
+独立 benchmark 可以直接加载这些文件，无需安装完整 vLLM。
 
-The same upstream files also appear under `../vllm/` in their original package
-paths. The duplicate copies are intentional and were byte-identical when this
-repository was prepared.
+相同的上游文件还按照原始 package 路径保存在 `../vllm/` 中。这里有意保留
+重复副本；准备本仓库时，两处对应文件逐字节一致。
 
-| Flat snapshot | Original path under `vllm/` |
+| 扁平快照 | `vllm/` 下的原始路径 |
 | --- | --- |
 | `config.py` | `model_executor/layers/quantization/turboquant/config.py` |
 | `centroids.py` | `model_executor/layers/quantization/turboquant/centroids.py` |
@@ -21,5 +19,5 @@ repository was prepared.
 | `soa_unified.py` | `v1/attention/ops/turboquant_soa/triton_turboquant_unified_attention.py` |
 | `flydsl_decode.py` | `v1/attention/ops/flydsl_turboquant_decode.py` |
 
-These files retain their original Apache-2.0 SPDX headers. See
-`../vllm/LICENSE` and `../THIRD_PARTY_NOTICES.md`.
+这些文件保留原始 Apache-2.0 SPDX header。许可证与第三方来源说明见
+`../vllm/LICENSE` 和 `../THIRD_PARTY_NOTICES.md`。

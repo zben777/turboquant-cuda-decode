@@ -46,13 +46,13 @@ export CUDA_HOME=/path/to/cuda  # 仅在自动检测失败时需要
 可能需要几分钟。
 
 ```bash
-./baseline/run.sh smoke       # 短版 Triton/CUDA V7 correctness 与计时
-./baseline/run.sh store       # 原始 Q/K/V -> vLLM Store -> 两种 Decode
-./baseline/run.sh benchmark   # 正式 Triton 与 CUDA V1-V7 测量
+./run.sh smoke       # 短版 Triton/CUDA V7 correctness 与计时
+./run.sh store       # 原始 Q/K/V -> vLLM Store -> 两种 Decode
+./run.sh benchmark   # 正式 Triton 与 CUDA V1-V7 测量
 ```
 
 该 runner 可以从任意当前目录调用，并支持通过 `PYTHON` 和 `CUDA_HOME`
-覆盖环境。其他模式及逐文件说明见 [baseline 指南](baseline/README_CN.md)。
+覆盖环境。运行 `./run.sh help` 可以查看全部模式。
 
 ## 许可证
 
@@ -83,8 +83,7 @@ pair-LUT 构造、Stage2 split reduction、输入构造、内存分配和 JIT �
 正式 baseline 测试命令为：
 
 ```bash
-cd baseline
-python -B bench_triton_baselines.py \
+python -B -m benchmarks.stage1 \
   --include-cuda --include-cuda-v2 --include-cuda-v3 \
   --include-cuda-v4 --include-cuda-v5 --include-cuda-v6 \
   --include-cuda-v7
@@ -178,8 +177,7 @@ tq4_cuda_v7_full(...)    -> 先调用 V7 Stage1，再调用 V7 Stage2
 执行 log-sum-exp reduction：
 
 ```bash
-cd baseline
-python -B bench_full_decode.py
+python -B -m benchmarks.full_decode
 ```
 
 这里的“完整 decode”指：从预先旋转好的 `q_rot` 和压缩 KV cache 开始，
@@ -209,7 +207,7 @@ CUDA V7 full LSE max abs      9.54e-07
 
 CUDA Stage2 kernel 使用 40 registers/thread 和 136 B shared/CTA。
 
-`baseline/bench_cuda_v1.py` 还会选择一个误差最坏的 split，分别与标准 FP32
+`tools/cuda_v1_diagnostic.py` 还会选择一个误差最坏的 split，分别与标准 FP32
 实现和模拟 Triton FP16 Tensor Core 路径的 PyTorch 实现进行诊断比较。
 
 ## 真实 Store 兼容性
@@ -220,7 +218,7 @@ packing、norm/scale/zero metadata 写入和 Q rotation，然后将同一个 cac
 tensor 直接交给 Triton V2-fixed 与 CUDA V7：
 
 ```bash
-python -B baseline/bench_store_decode.py
+python -B -m validation.store_decode
 ```
 
 Store 与 Decode 之间没有 cache conversion 或 byte rearrangement。RTX 3090
@@ -249,7 +247,7 @@ CUDA 与 Triton 之间的差异远小于量化结果与 FP32 之间的差异。�
 传给 `tl.dot`。该写法在 CUDA 上悄悄产生了 V 列置换：LSE 仍然正确，但
 输出最大误差达到了约 `0.325`。
 
-`baseline/tq4_v2_stage1.py` 是修复后的研究 baseline。它使用 `d // 2`
+`baseline/triton_v2.py` 是修复后的研究 baseline。它使用 `d // 2`
 字节索引和每个维度对应的 nibble shift，直接构造最终的
 `[TILE_SIZE, BLOCK_D]` V layout。相对于标准 FP32 实现，其最大输出误差约为
 `8.5e-05`。
@@ -336,8 +334,11 @@ CUDA V7: 34 static BAR.SYNC sites，比 V2-fixed 快 2.007x
 
 | 路径 | 作用 | 从这里开始 |
 | --- | --- | --- |
-| `baseline/` | 固定输入、独立 launcher、correctness 与计时 | [Baseline 指南](baseline/README_CN.md) |
-| `cuda/` | 分版本 CUDA 入口、共享 Stage1 模板与 binding | [CUDA 指南](cuda/README_CN.md) |
+| `baseline/` | 四个可复用 Triton baseline 模块：common、V1、V2-fixed、Stage2 | [Baseline 指南](baseline/README.md) |
+| `benchmarks/` | 正式 Stage1 与 Full Decode 性能入口 | [Benchmark 指南](benchmarks/README.md) |
+| `validation/` | 真实 vLLM SoA Store 到 Decode 兼容性验证 | [验证指南](validation/README.md) |
+| `tools/` | 历史 CUDA V1 与独立 profiler 诊断 | [工具指南](tools/README.md) |
+| `cuda/` | 分版本 CUDA 入口、共享 Stage1 模板与 binding | [CUDA 指南](cuda/README.md) |
 | `reference/` | 从 vLLM 源码树复制且未经修改的扁平快照 | [来源说明](reference/README.md) |
 | `results/` | V2 修复前的 Nsight Compute 报告和 SASS 导出 | [结果说明](results/README.md) |
 | `docs/` | 历史 profiling 与设计记录 | [V2 Stage1 记录](docs/v2_stage1.md) |

@@ -6,7 +6,7 @@ from pathlib import Path
 import torch
 import triton
 
-from tq4_common import MSE_BITS, MSE_BYTES, NORM_CORRECTION, VALUE_BITS
+from baseline.common import MSE_BITS, MSE_BYTES, NORM_CORRECTION, VALUE_BITS
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]

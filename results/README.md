@@ -1,13 +1,12 @@
-# Historical Profiling Results
+# 历史 Profiling 结果
 
-This directory contains Nsight Compute reports and a SASS export captured
-while investigating the original SoA Triton V2 kernel.
+本目录保存分析原始 SoA Triton V2 kernel 时生成的 Nsight Compute 报告和
+SASS 导出。
 
-These artifacts **predate the V2 correctness fix**. The profiled kernel had a
-silent V-column permutation caused by its `tl.interleave` path, so the old
-timing near `2.29 ms` is invalid as a performance baseline. The memory-access
-and instruction observations remain useful as historical diagnostic material,
-but exact performance metrics should be recollected on V2-fixed.
+这些文件生成于 **V2 correctness 修复之前**。当时被 profile 的 kernel
+因为 `tl.interleave` 路径存在静默的 V 列置换，因此旧的约 `2.29 ms` 时间
+不能作为有效性能 baseline。其访存和指令观察仍可作为历史诊断材料，但精确
+性能指标需要在 V2-fixed 上重新采集。
 
-Current correctness and benchmark results are recorded in `../README.md`.
-The detailed historical analysis is in `../docs/v2_stage1.md`.
+当前 correctness 与 benchmark 结果见 `../README_CN.md`，详细历史分析见
+`../docs/v2_stage1.md`。

@@ -3,7 +3,7 @@ import time
 
 import torch
 
-from tq4_common import (
+from baseline.common import (
     BATCH_SIZE,
     CONTEXT_LEN,
     NUM_Q_HEADS,
@@ -17,7 +17,7 @@ from tq4_common import (
     build_inputs,
 )
 
-from tq4_v2_stage1 import (
+from baseline.triton_v2 import (
     launch_tq4_v2_stage1,
 )
 

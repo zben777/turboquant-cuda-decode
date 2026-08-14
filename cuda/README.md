@@ -1,110 +1,104 @@
-# CUDA Kernel Implementations
+# CUDA Kernel 实现
 
-[中文版](README_CN.md)
+本目录保存按版本演进的 CUDA 实验代码。它本身不是独立可执行程序；
+`benchmarks/` 中的 Python 入口会把这些文件 JIT 编译成 PyTorch extension。
 
-This directory contains the versioned CUDA experiments. It is implementation
-code rather than a standalone executable; the Python launchers in `baseline/`
-JIT-compile these files as PyTorch extensions.
-
-## How The Files Connect
+## 文件如何连接
 
 ```text
-baseline/bench_*.py
+benchmarks/*.py
   -> torch.utils.cpp_extension.load(...)
-  -> tq4_cuda_vN_bind.cpp       PyTorch/Python exports
-  -> tq4_cuda_vN.cu             CUDA entry point and kernel
-  -> tq4_cuda_stage1_template.cuh  shared V4-V7 implementation
+  -> tq4_cuda_vN_bind.cpp       PyTorch/Python 导出层
+  -> tq4_cuda_vN.cu             CUDA 入口和 kernel
+  -> tq4_cuda_stage1_template.cuh  V4-V7 共享实现
 ```
 
-For each version, the `.cu` file owns the CUDA implementation and the matching
-`_bind.cpp` file only declares and exports its callable functions. Directories
-named `build_v*` are generated extension build products, are ignored by Git,
-and may be removed with `./baseline/run.sh clean` from the repository root.
+每个版本的 `.cu` 文件包含 CUDA 实现，对应的 `_bind.cpp` 只负责声明并导出
+可由 Python 调用的函数。`build_v*` 是 extension 编译时生成的目录，已经被
+Git 忽略；在仓库根目录执行 `./run.sh clean` 即可删除。
 
-## Version Map
+## 版本地图
 
-| Version | Main change | Fixed-workload Stage1 |
+| 版本 | 核心变化 | 固定 workload Stage1 |
 | --- | --- | ---: |
-| V1 | One CTA per `(batch, KV head, split)`; shares decoded K/V across four GQA heads | 4.61 ms |
-| V2 | One warp per Q head; warp-local online softmax and no CTA barriers, at the cost of repeated K/V decode | 4.04 ms |
-| V3 | Single-pass tiled online softmax and WMMA Tensor Core QK/PV; accumulator stays in fragments | 2.29 ms |
-| V4 | Fixed 128-token split specialization, register centroid LUT, unrolled tile loop | 2.24 ms |
-| V5 | Writes valid WMMA fragment rows directly to `mid_o`, removing the large output scratch | 1.73 ms |
-| V6 | Uses aligned `uint32` packed-cache loads and `half2` reconstructed-value stores | 1.41 ms |
-| V7 | Fuses adjacent tile synchronization and adds CUDA Stage2 plus the Full Decode launcher | 1.40 ms |
+| V1 | 一个 CTA 负责 `(batch, KV head, split)`，四个 GQA head 复用解码后的 K/V | 4.61 ms |
+| V2 | 每个 Q head 使用一个 warp，softmax 保留在 warp 内且无 CTA barrier，但重复解码 K/V | 4.04 ms |
+| V3 | 单遍 tiled online softmax，使用 WMMA Tensor Core 完成 QK/PV，累加器保留在 fragment 中 | 2.29 ms |
+| V4 | 特化固定 128-token split，register centroid LUT，展开 tile 循环 | 2.24 ms |
+| V5 | 从 WMMA fragment 把有效行直接写入 `mid_o`，移除大型 output scratch | 1.73 ms |
+| V6 | 使用对齐 `uint32` packed-cache load 和 `half2` 重建值 store | 1.41 ms |
+| V7 | 合并相邻 tile 的同步，并加入 CUDA Stage2 和 Full Decode launcher | 1.40 ms |
 
-Times are representative RTX 3090 medians for the repository's fixed workload;
-the root README contains the authoritative recorded run and comparison table.
-V1-V7 are optimization-history labels, not production API versions.
+这些是 RTX 3090 固定 workload 下的代表性中位数；根 README 的实测表是正式
+记录。V1-V7 表示优化历史，不是 production API 版本号。
 
-V1 and V2 each have a self-contained `.cu` implementation. V3 is also
-self-contained and establishes the Tensor Core execution graph. V4-V7 reuse:
+V1、V2 各自拥有完整的 `.cu` 实现。V3 也是独立实现，并首次建立 Tensor
+Core 执行图。V4-V7 共同复用：
 
 ```text
 tq4_cuda_stage1_template.cuh
 ```
 
-Their small `.cu` files select the entry-point names and feature flags:
+对应的小型 `.cu` 文件只选择入口名称并逐步打开以下特性：
 
-| Flag | Introduced | Effect |
+| 宏 | 首次启用 | 作用 |
 | --- | --- | --- |
-| `TQ4_DIRECT_WRITE` | V5 | Direct WMMA-fragment writeback |
-| `TQ4_VECTOR_DECODE` | V6 | Packed vector decode and stores |
-| `TQ4_FUSED_TILE_BARRIER` | V7 | Removes the redundant per-tile barrier |
+| `TQ4_DIRECT_WRITE` | V5 | WMMA fragment 直接写回 |
+| `TQ4_VECTOR_DECODE` | V6 | packed 数据向量化解码与写入 |
+| `TQ4_FUSED_TILE_BARRIER` | V7 | 移除每个 tile 中冗余的 barrier |
 
-## Stage1, Stage2, And Full Decode
+## Stage1、Stage2 与 Full Decode
 
-V1-V6 export Stage1 only. V7 is the complete CUDA chain and exports:
+V1-V6 只导出 Stage1。V7 是完整 CUDA 链路，导出以下函数：
 
-| Python symbol | Work performed |
+| Python symbol | 执行内容 |
 | --- | --- |
-| `tq4_cuda_v7_stage1` | Decode compressed K/V, compute split attention, and write partial output plus split LSE to `mid_o` |
-| `tq4_cuda_v7_stage2` | Merge 32 split results with log-sum-exp correction into final output and LSE |
-| `tq4_cuda_v7_full` | Launch Stage1 followed by Stage2 |
-| `tq4_cuda_v7` | Compatibility alias for the Stage1 benchmark |
+| `tq4_cuda_v7_stage1` | 解码压缩 K/V、计算每个 split 的 attention，并把 partial output 和 split LSE 写入 `mid_o` |
+| `tq4_cuda_v7_stage2` | 使用 log-sum-exp 修正归并 32 个 split，生成最终 output 和 LSE |
+| `tq4_cuda_v7_full` | 依次 launch Stage1 和 Stage2 |
+| `tq4_cuda_v7` | Stage1 benchmark 使用的兼容别名 |
 
-Stage2 is a separate launch because all split CTAs must finish before their
-partial results can be reduced. A normal CUDA kernel has no grid-wide barrier,
-so keeping the boundary makes the dependency explicit and avoids a cooperative
-launch constraint.
+Stage2 单独 launch，是因为归并前必须确保所有 split CTA 都已经完成。普通
+CUDA kernel 不提供 grid-wide barrier；保留 kernel 边界可以明确表达该依赖，
+也不需要 cooperative launch 的额外限制。
 
-## Diagnostic File
+## 诊断文件
 
-`wmma_fragment_probe.cu` recovers and verifies the `sm_86` WMMA accumulator
-lane-to-row mapping used by direct fragment writeback. It is a development
-probe, not part of the benchmark or Full Decode path.
+`wmma_fragment_probe.cu` 用于恢复并验证 `sm_86` WMMA accumulator 的
+lane-to-row 映射，V5 的 fragment 直接写回依赖该结论。它是开发诊断程序，
+不参与 benchmark 或 Full Decode 链路。
 
-## Build And Run
+## 编译与运行
 
-From the repository root:
+在仓库根目录执行：
 
 ```bash
-./baseline/run.sh smoke       # compile V7 and run a short regression
-./baseline/run.sh benchmark   # compile and measure V1-V7
-./baseline/run.sh clean       # remove generated build_v* directories
+./run.sh smoke       # 编译 V7 并执行短回归
+./run.sh benchmark   # 编译和测量 V1-V7
+./run.sh clean       # 删除生成的 build_v* 目录
 ```
 
-See [`../baseline/README.md`](../baseline/README.md) for every test entry point.
+性能测量入口见 [`../benchmarks/README.md`](../benchmarks/README.md)。
 
-## Reading Order
+## 推荐阅读顺序
 
-To understand the final implementation first, read:
+希望先理解最终实现时，按下面顺序阅读：
 
 ```text
 tq4_cuda_v7.cu
   -> tq4_cuda_stage1_template.cuh
   -> tq4_cuda_v7_bind.cpp
-  -> ../baseline/bench_full_decode.py
+  -> ../benchmarks/full_decode.py
 ```
 
-Then compare the feature macros in V4-V6. Read V1-V3 afterward when studying
-why the execution design changed.
+然后比较 V4-V6 文件中逐步增加的 feature macro。研究设计为什么变化时，再
+回头阅读 V1-V3。
 
-## Current Constraints
+## 当前限制
 
-- V3-V7 target the fixed Qwen3-4B-shaped workload documented in the root README.
-- V4-V7 require an aligned 128-token split.
-- V5-V7 depend on the empirically verified `sm_86` WMMA fragment mapping.
-- V6-V7 require the packed cache addresses to be four-byte aligned.
-- These kernels are research extensions and are not yet registered as a
-  drop-in vLLM attention backend.
+- V3-V7 面向根 README 记录的固定 Qwen3-4B-shaped workload。
+- V4-V7 要求每个 split 是对齐的 128 个 token。
+- V5-V7 依赖实验验证的 `sm_86` WMMA fragment mapping。
+- V6-V7 要求 packed cache 地址满足四字节对齐。
+- 这些 kernel 目前是研究 extension，尚未注册成可直接替换的 vLLM
+  attention backend。

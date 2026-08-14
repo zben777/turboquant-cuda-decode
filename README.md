@@ -48,14 +48,13 @@ Run these commands from the repository root. The first CUDA run JIT-compiles
 the extension and can take a few minutes.
 
 ```bash
-./baseline/run.sh smoke       # short Triton/CUDA V7 correctness and timing
-./baseline/run.sh store       # raw Q/K/V -> vLLM Store -> both decoders
-./baseline/run.sh benchmark   # official Triton and CUDA V1-V7 measurements
+./run.sh smoke       # short Triton/CUDA V7 correctness and timing
+./run.sh store       # raw Q/K/V -> vLLM Store -> both decoders
+./run.sh benchmark   # official Triton and CUDA V1-V7 measurements
 ```
 
 The runner works from any current directory and accepts `PYTHON` and
-`CUDA_HOME` overrides. See the [baseline guide](baseline/README.md) for its
-other modes and a file-by-file map.
+`CUDA_HOME` overrides. Run `./run.sh help` to list all modes.
 
 ## Licensing
 
@@ -89,8 +88,7 @@ outside the timed region.
 The authoritative baseline command is:
 
 ```bash
-cd baseline
-python -B bench_triton_baselines.py \
+python -B -m benchmarks.stage1 \
   --include-cuda --include-cuda-v2 --include-cuda-v3 \
   --include-cuda-v4 --include-cuda-v5 --include-cuda-v6 \
   --include-cuda-v7
@@ -184,8 +182,7 @@ The complete-decode benchmark adds the Stage2 log-sum-exp reduction across all
 32 KV splits:
 
 ```bash
-cd baseline
-python -B bench_full_decode.py
+python -B -m benchmarks.full_decode
 ```
 
 Here, "complete decode" means pre-rotated `q_rot` plus compressed KV through
@@ -215,7 +212,7 @@ CUDA V7 full LSE max abs      9.54e-07
 
 The CUDA Stage2 kernel uses 40 registers/thread and 136 B shared/CTA.
 
-`baseline/bench_cuda_v1.py` additionally diagnoses one worst-case split
+`tools/cuda_v1_diagnostic.py` additionally diagnoses one worst-case split
 against canonical FP32 and a PyTorch mimic of the Triton FP16 tensor-core
 path.
 
@@ -228,7 +225,7 @@ and Q rotation, then passes the same cache tensor directly to Triton V2-fixed
 and CUDA V7:
 
 ```bash
-python -B baseline/bench_store_decode.py
+python -B -m validation.store_decode
 ```
 
 No cache conversion or byte rearrangement occurs between Store and Decode.
@@ -257,7 +254,7 @@ The copied upstream V2 reconstructs V with `tl.interleave(v_lo, v_hi)` and
 feeds that value directly to `tl.dot`. On CUDA this produced a silent V-column
 permutation: LSE remained correct, but output max error reached about `0.325`.
 
-`baseline/tq4_v2_stage1.py` is the fixed research baseline. It constructs the
+`baseline/triton_v2.py` is the fixed research baseline. It constructs the
 final `[TILE_SIZE, BLOCK_D]` V layout directly with `d // 2` byte indices and
 per-dimension nibble shifts. Its max output error against canonical FP32 is
 about `8.5e-05`.
@@ -348,7 +345,10 @@ CUDA V7: 34 static BAR.SYNC sites, 2.007x faster than V2-fixed
 
 | Path | Role | Start here |
 | --- | --- | --- |
-| `baseline/` | Fixed inputs, standalone launchers, correctness, and timing | [Baseline guide](baseline/README.md) |
+| `baseline/` | Four reusable Triton baseline modules: common, V1, V2-fixed, and Stage2 | [Baseline guide](baseline/README.md) |
+| `benchmarks/` | Authoritative Stage1 and Full Decode performance entry points | [Benchmark guide](benchmarks/README.md) |
+| `validation/` | Real vLLM SoA Store-to-Decode compatibility test | [Validation guide](validation/README.md) |
+| `tools/` | Historical CUDA V1 and focused profiler diagnostics | [Tools guide](tools/README.md) |
 | `cuda/` | Versioned CUDA entry points, shared Stage1 template, and bindings | [CUDA guide](cuda/README.md) |
 | `reference/` | Unmodified flat snapshots copied from the source vLLM tree | [Provenance](reference/README.md) |
 | `results/` | Pre-fix V2 Nsight Compute reports and SASS export | [Results notes](results/README.md) |

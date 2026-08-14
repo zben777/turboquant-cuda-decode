@@ -8,7 +8,7 @@ import torch
 # Import upstream reference code
 #
 # 当前文件:
-#   baseline/tq4_common.py
+#   baseline/common.py
 #
 # upstream reference:
 #   reference/centroids.py

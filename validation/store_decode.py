@@ -3,8 +3,8 @@ import math
 
 import torch
 
-from bench_triton_baselines import build_cuda_v7_extension, diff_stats
-from tq4_common import (
+from benchmarks.stage1 import build_cuda_v7_extension, diff_stats
+from baseline.common import (
     BATCH_SIZE,
     BLOCK_BYTES,
     BLOCK_SIZE,
@@ -26,9 +26,9 @@ from tq4_common import (
     build_pair_lut,
     build_seq_lens,
 )
-from tq4_soa_store import launch_soa_store
-from tq4_stage2 import launch_stage2
-from tq4_v2_stage1 import launch_tq4_v2_stage1
+from validation.soa_store import launch_soa_store
+from baseline.stage2 import launch_stage2
+from baseline.triton_v2 import launch_tq4_v2_stage1
 
 
 def parse_args():

@@ -2,7 +2,7 @@ import torch
 import triton
 import triton.language as tl
 
-from tq4_common import HEAD_DIM, NUM_KV_SPLITS
+from .common import HEAD_DIM, NUM_KV_SPLITS
 
 
 @triton.jit

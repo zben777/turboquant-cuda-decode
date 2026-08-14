@@ -1,19 +1,17 @@
-# Extracted vLLM TurboQuant Sources
+# 摘取的 vLLM TurboQuant 源码
 
-This directory is **not a complete vLLM checkout**. It preserves only the
-TurboQuant-related files extracted from a local vLLM source tree so that the
-CUDA experiments can be compared with the original backend organization.
+本目录 **不是完整的 vLLM checkout**。这里只保存从本地 vLLM 源码树中摘取
+的 TurboQuant 相关文件，用于将 CUDA 实验与原始 backend 组织和实现对照。
 
-The extracted files are kept in their original package paths and have not
-been modified for this research harness. Each source file retains the vLLM
-Apache-2.0 SPDX header. See `LICENSE` in this directory.
+摘取的文件保留原始 package 路径，且没有针对本研究框架进行修改。每个源码
+文件都保留 vLLM 的 Apache-2.0 SPDX header，许可证见本目录的 `LICENSE`。
 
-Upstream project: <https://github.com/vllm-project/vllm>
+上游项目：<https://github.com/vllm-project/vllm>
 
-Snapshot prepared: 2026-08-14. The local source tree did not contain Git
-metadata, so the exact upstream commit cannot be recorded retroactively.
+快照准备日期：2026-08-14。由于本地源代码目录没有 Git metadata，无法追溯
+并记录准确的上游 commit。
 
-## Included paths
+## 包含的路径
 
 ```text
 vllm/model_executor/layers/quantization/turboquant/
@@ -24,6 +22,5 @@ vllm/v1/attention/ops/turboquant_soa/
 vllm/v1/attention/ops/flydsl_turboquant_decode.py
 ```
 
-These files are provided for provenance and source comparison. They cannot be
-imported as a standalone `vllm` package because their normal dependencies from
-the rest of vLLM are intentionally absent.
+这些文件仅用于来源追踪和源码对照。由于有意省略了完整 vLLM 中的其他依赖，
+它们不能作为独立的 `vllm` package 直接导入。

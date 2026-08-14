@@ -4,7 +4,7 @@ import torch
 import triton
 import triton.language as tl
 
-from tq4_common import (
+from .common import (
     BATCH_SIZE,
     CONTEXT_LEN,
     NUM_Q_HEADS,

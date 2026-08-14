@@ -7,7 +7,7 @@ from pathlib import Path
 import torch
 import triton
 
-from tq4_common import (
+from .common import (
     BLOCK_SIZE,
     GQA_GROUP_SIZE,
     HEAD_DIM,

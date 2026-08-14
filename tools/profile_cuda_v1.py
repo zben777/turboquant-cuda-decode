@@ -1,7 +1,7 @@
 import torch
 
-from bench_cuda_v1 import build_extension
-from tq4_common import (
+from .cuda_v1_diagnostic import build_extension
+from baseline.common import (
     BATCH_SIZE,
     HEAD_DIM,
     NUM_KV_SPLITS,
