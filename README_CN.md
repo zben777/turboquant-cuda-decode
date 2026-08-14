@@ -198,6 +198,37 @@ CUDA Stage2 kernel 使用 40 registers/thread 和 136 B shared/CTA。
 `baseline/bench_cuda_v1.py` 还会选择一个误差最坏的 split，分别与标准 FP32
 实现和模拟 Triton FP16 Tensor Core 路径的 PyTorch 实现进行诊断比较。
 
+## 真实 Store 兼容性
+
+独立兼容性测试会在 decode 前运行未经修改的 vLLM SoA Triton Store。测试从
+原始 FP16 Q/K/V 开始，真实执行 K rotation、Lloyd-Max bucketize、K/V 4-bit
+packing、norm/scale/zero metadata 写入和 Q rotation，然后将同一个 cache
+tensor 直接交给 Triton V2-fixed 与 CUDA V7：
+
+```bash
+python -B baseline/bench_store_decode.py
+```
+
+Store 与 Decode 之间没有 cache conversion 或 byte rearrangement。RTX 3090
+correctness 结果如下：
+
+```text
+CUDA V7 vs Triton output max/mean  4.4517219e-06 / 1.3544668e-07
+CUDA V7 vs Triton LSE    max/mean  9.5367432e-07 / 2.5099143e-07
+```
+
+对于 sequence 0，该测试还会将量化后的 Triton decode 与使用原始、未量化
+FP32 Q/K/V 计算的 attention 进行比较：
+
+```text
+Quantization output max/mean  0.013347317 / 0.0027882606
+Quantization LSE    max/mean  0.0039367676 / 0.0016208589
+```
+
+CUDA 与 Triton 之间的差异远小于量化结果与 FP32 之间的差异。这说明 CUDA V7
+能够正确读取 production Store layout；相对 FP32 的较大差异来自预期的 4-bit
+量化误差，而不是 cache layout 错误。
+
 ## V2 Correctness 修复
 
 从上游复制的 V2 使用 `tl.interleave(v_lo, v_hi)` 重建 V，然后把结果直接

@@ -204,6 +204,38 @@ The CUDA Stage2 kernel uses 40 registers/thread and 136 B shared/CTA.
 against canonical FP32 and a PyTorch mimic of the Triton FP16 tensor-core
 path.
 
+## Real Store Compatibility
+
+The standalone compatibility test runs the unmodified vLLM SoA Triton Store
+before decode. It starts from raw FP16 Q/K/V, performs the real K rotation,
+Lloyd-Max bucketization, K/V 4-bit packing, norm/scale/zero metadata writes,
+and Q rotation, then passes the same cache tensor directly to Triton V2-fixed
+and CUDA V7:
+
+```bash
+python -B baseline/bench_store_decode.py
+```
+
+No cache conversion or byte rearrangement occurs between Store and Decode.
+RTX 3090 correctness results:
+
+```text
+CUDA V7 vs Triton output max/mean  4.4517219e-06 / 1.3544668e-07
+CUDA V7 vs Triton LSE    max/mean  9.5367432e-07 / 2.5099143e-07
+```
+
+For sequence 0, the same test also compares quantized Triton decode with
+attention computed from the original, unquantized FP32 Q/K/V:
+
+```text
+Quantization output max/mean  0.013347317 / 0.0027882606
+Quantization LSE    max/mean  0.0039367676 / 0.0016208589
+```
+
+The much smaller CUDA-vs-Triton difference shows that CUDA V7 correctly
+consumes the production Store layout; the remaining larger difference from
+FP32 is the expected 4-bit quantization error rather than a cache-layout error.
+
 ## V2 Correctness Fix
 
 The copied upstream V2 reconstructs V with `tl.interleave(v_lo, v_hi)` and
