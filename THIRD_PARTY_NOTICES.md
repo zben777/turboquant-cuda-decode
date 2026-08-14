@@ -18,5 +18,3 @@ metadata, so an exact upstream commit identifier is not available in this
 snapshot.
 
 
-git config --global user.name "zben777"
-git config --global user.email "76135327@qq.com"
