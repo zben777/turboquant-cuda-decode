@@ -13,6 +13,7 @@ stage1_cuda_flags=(
   --include-cuda-v6
   --include-cuda-v7
   --include-cuda-v8
+  --include-cuda-v9
 )
 
 usage() {
@@ -22,9 +23,9 @@ Usage: ./run.sh MODE
 Modes:
   check       Parse every Python source file; no GPU work.
   layout      Build and validate the fixed synthetic SoA inputs.
-  smoke       Short Triton/CUDA V7-V8 Stage1 and V7 Full Decode regression.
+  smoke       Short Triton/CUDA V8-V9 Stage1 and V7 Full Decode regression.
   store       Raw Q/K/V -> vLLM SoA Store -> Triton/CUDA Decode check.
-  benchmark   Official five-round Stage1 V1-V8 and Full Decode benchmark.
+  benchmark   Official five-round Stage1 V1-V9 and Full Decode benchmark.
   all         Run check, layout, benchmark, and store in sequence.
   clean       Remove generated PyTorch CUDA extension build directories.
   help        Show this message.
@@ -56,7 +57,7 @@ run_smoke() {
   run_check
   echo "== Short Stage1 regression =="
   (cd "${PROJECT_ROOT}" && "${PYTHON_BIN}" -B -m benchmarks.stage1 \
-    --include-cuda-v7 --include-cuda-v8 --warmup 3 --iters 10 --rounds 1
+    --include-cuda-v8 --include-cuda-v9 --warmup 3 --iters 10 --rounds 1
   )
   echo "== Short Full Decode regression =="
   (cd "${PROJECT_ROOT}" && "${PYTHON_BIN}" -B -m benchmarks.full_decode \

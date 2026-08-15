@@ -46,9 +46,9 @@ export CUDA_HOME=/path/to/cuda  # 仅在自动检测失败时需要
 可能需要几分钟。
 
 ```bash
-./run.sh smoke       # 短版 Triton/CUDA V7-V8 correctness 与计时
+./run.sh smoke       # 短版 Triton/CUDA V8-V9 correctness 与计时
 ./run.sh store       # 原始 Q/K/V -> vLLM Store -> 两种 Decode
-./run.sh benchmark   # 正式 Triton 与 CUDA V1-V8 测量
+./run.sh benchmark   # 正式 Triton 与 CUDA V1-V9 测量
 ```
 
 该 runner 可以从任意当前目录调用，并支持通过 `PYTHON` 和 `CUDA_HOME`
@@ -86,7 +86,7 @@ pair-LUT 构造、Stage2 split reduction、输入构造、内存分配和 JIT �
 python -B -m benchmarks.stage1 \
   --include-cuda --include-cuda-v2 --include-cuda-v3 \
   --include-cuda-v4 --include-cuda-v5 --include-cuda-v6 \
-  --include-cuda-v7 --include-cuda-v8
+  --include-cuda-v7 --include-cuda-v8 --include-cuda-v9
 ```
 
 测试脚本首先构造一份逻辑 cache，然后在 SoA 和 AoS 之间进行无损转换。
@@ -97,39 +97,42 @@ CUDA event 的计时，最终报告五轮的中位数。
 
 | 实现 | Stage1 中位时间 | 定位 |
 | --- | ---: | --- |
-| AoS Triton V1 | 1.672294 ms | Production/reference baseline |
-| SoA Triton V1 | 1.276106 ms | Layout ablation |
-| SoA Triton V2-fixed | 1.075814 ms | 强 baseline 和首要比较目标 |
-| CUDA V1 | 2.069760 ms | 第一个 CUDA candidate |
-| CUDA V2 | 1.745265 ms | Warp-per-Q 实验 |
-| CUDA V3 | 1.380351 ms | 单遍 Tensor Core candidate |
-| CUDA V4 | 1.121577 ms | 固定 workload 的 `sm_89` candidate |
-| CUDA V5 | 0.845466 ms | WMMA fragment 直接写回 candidate |
-| CUDA V6 | 0.638740 ms | 向量化 INT4 decode candidate |
-| CUDA V7 | 0.631153 ms | 融合 tile barrier candidate |
-| CUDA V8 | 0.513133 ms | 原生 `m16n8k16` GQA-4 candidate |
+| AoS Triton V1 | 1.692314 ms | Production/reference baseline |
+| SoA Triton V1 | 1.284270 ms | Layout ablation |
+| SoA Triton V2-fixed | 1.075988 ms | 强 baseline 和首要比较目标 |
+| CUDA V1 | 2.074204 ms | 第一个 CUDA candidate |
+| CUDA V2 | 1.748470 ms | Warp-per-Q 实验 |
+| CUDA V3 | 1.380587 ms | 单遍 Tensor Core candidate |
+| CUDA V4 | 1.121208 ms | 固定 workload 的 `sm_89` candidate |
+| CUDA V5 | 0.845486 ms | WMMA fragment 直接写回 candidate |
+| CUDA V6 | 0.638863 ms | 向量化 INT4 decode candidate |
+| CUDA V7 | 0.631122 ms | 融合 tile barrier candidate |
+| CUDA V8 | 0.513208 ms | 原生 `m16n8k16` GQA-4 candidate |
+| CUDA V9 | 0.484516 ms | FlashInfer 式融合 online-softmax candidate |
 
 实测提升如下：
 
 ```text
-AoS V1 -> SoA V1       1.310x
-SoA V1 -> V2-fixed     1.186x
-AoS V1 -> V2-fixed     1.554x
+AoS V1 -> SoA V1       1.318x
+SoA V1 -> V2-fixed     1.194x
+AoS V1 -> V2-fixed     1.573x
 CUDA V1 -> CUDA V2     1.186x
 CUDA V1 vs V2-fixed    慢 1.924x
-CUDA V2 vs V2-fixed    慢 1.622x
-CUDA V2 -> CUDA V3     1.265x
+CUDA V2 vs V2-fixed    慢 1.625x
+CUDA V2 -> CUDA V3     1.266x
 CUDA V3 vs V2-fixed    慢 1.283x
 CUDA V3 -> CUDA V4     1.231x
-CUDA V4 vs V2-fixed    慢 1.043x
+CUDA V4 vs V2-fixed    慢 1.042x
 CUDA V4 -> CUDA V5     1.326x
 CUDA V5 vs V2-fixed    快 1.272x
-CUDA V5 -> CUDA V6     1.324x
+CUDA V5 -> CUDA V6     1.323x
 CUDA V6 vs V2-fixed    快 1.684x
 CUDA V6 -> CUDA V7     1.012x
 CUDA V7 vs V2-fixed    快 1.705x
 CUDA V7 -> CUDA V8     1.230x
 CUDA V8 vs V2-fixed    快 2.097x
+CUDA V8 -> CUDA V9     1.059x
+CUDA V9 vs V2-fixed    快 2.221x
 ```
 
 以 SoA Triton V1 的完整 Stage1 输出为参照，correctness 结果为：
@@ -145,6 +148,7 @@ CUDA V5 output max abs      9.68e-05
 CUDA V6 output max abs      9.68e-05
 CUDA V7 output max abs      9.68e-05
 CUDA V8 output max abs      9.68e-05
+CUDA V9 output max abs      9.68e-05
 ```
 
 ## 版本与执行入口对应关系
@@ -162,10 +166,11 @@ CUDA 的版本号记录的是连续进行的每一轮 **Stage1 优化**。它并
 | `tq4_cuda_v6.cu` | 有 | - | - | 向量化 packed-cache decode |
 | `tq4_cuda_v7.cu` | 有 | 有 | 有 | 融合 barrier，并加入完整 decode |
 | `tq4_cuda_v8.cu` | 有 | - | - | 原生 `m16n8k16` GQA-4 Tensor Core 路径 |
+| `tq4_cuda_v9.cu` | 有 | - | - | register-resident 融合 online softmax |
 
 V4 到 V7 通过编译期选项启用不同优化，并包含共享 Stage1 实现
 `cuda/tq4_cuda_stage1_template.cuh`。这个模板文件不是一个新的 benchmark
-版本。V8 因为使用不同的转置 `m16n8k16` fragment 布局而采用独立 Stage1
+版本。V8/V9 因为使用不同的转置 `m16n8k16` fragment 布局而采用独立 Stage1
 实现。V7 明确导出以下三个 Python 入口：
 
 ```text
@@ -194,12 +199,12 @@ RTX 4090 原生 `sm_89` 五轮测试中位数：
 
 | 实现 | Stage1 | Stage2 | 完整 decode |
 | --- | ---: | ---: | ---: |
-| Triton V2-fixed | 1.068268 ms | 0.023765 ms | 1.105396 ms |
-| CUDA V7 | 0.631047 ms | 0.008888 ms | 0.664608 ms |
+| Triton V2-fixed | 1.066916 ms | 0.024852 ms | 1.104148 ms |
+| CUDA V7 | 0.631255 ms | 0.008868 ms | 0.664842 ms |
 
 ```text
-CUDA V7 full vs Triton full  快 1.663x
-CUDA Stage2 占完整 decode     1.34%
+CUDA V7 full vs Triton full  快 1.661x
+CUDA Stage2 占完整 decode     1.33%
 ```
 
 相对于 Triton 完整 decode 的最终输出 correctness：
@@ -354,6 +359,17 @@ CUDA V8: 80 static HMMA sites, 34 static BAR.SYNC sites
 CUDA V8: 比 V7 快 1.230x，比 V2-fixed 快 2.097x
 ```
 
+CUDA V9 将 FlashInfer 的 register-resident attention-state 模式用到 V8
+量化路径。Warp 0 直接在 MMA accumulator 上归约四个 GQA head 的
+score 列，更新 online-softmax `(m, l)` state，仅将 FP16 概率写给 PV。
+这移除了 `qk_s` 往返和每个 16-token tile 的一次 CTA barrier。
+
+```text
+CUDA V9: 50 registers/thread, 9824 B shared/CTA
+CUDA V9: 80 static HMMA sites, 26 static BAR.SYNC sites
+CUDA V9: 比 V8 快 1.059x，比 V2-fixed 快 2.221x
+```
+
 ## 目录结构
 
 | 路径 | 作用 | 从这里开始 |
@@ -388,7 +404,7 @@ CUDA V8: 比 V7 快 1.230x，比 V2-fixed 快 2.097x
   slot layout 满足这一约束。
 - CUDA V7 依赖下一个 tile 的 metadata barrier，在 K/V shared storage 被
   覆盖之前保护上一个 tile 的 PV 输入。
-- CUDA V8 是仅包含 Stage1 的 `sm_89` inline-PTX 实验，继续要求固定的
+- CUDA V8/V9 是仅包含 Stage1 的 `sm_89` inline-PTX 实验，继续要求固定的
   128-token split 和四字节对齐 packed-cache。
 - CUDA V3 使用在 `sm_89` 上通过实验验证的 lane-to-row 映射，在 registers
   中缩放 WMMA accumulator fragment。`cuda/wmma_fragment_probe.cu` 可以复现
@@ -402,5 +418,5 @@ CUDA V8: 比 V7 快 1.230x，比 V2-fixed 快 2.097x
 - 复制来的 backend 在逻辑 cache shape 声明中采用 head-major，但其
   store/decode launcher 把维度当作 position-major。将 CUDA kernel 合入上游
   之前，需要解决该 production integration contract。
-- CUDA V7/V8 尚未集成进 production vLLM backend；当前的集成边界是独立、固定
+- CUDA V7/V8/V9 尚未集成进 production vLLM backend；当前的集成边界是独立、固定
   workload 的 benchmark 框架。

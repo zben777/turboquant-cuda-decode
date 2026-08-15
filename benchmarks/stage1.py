@@ -61,6 +61,7 @@ def parse_args():
     parser.add_argument("--include-cuda-v6", action="store_true")
     parser.add_argument("--include-cuda-v7", action="store_true")
     parser.add_argument("--include-cuda-v8", action="store_true")
+    parser.add_argument("--include-cuda-v9", action="store_true")
     return parser.parse_args()
 
 
@@ -197,6 +198,25 @@ def build_cuda_v8_extension():
     )
 
 
+def build_cuda_v9_extension():
+    os.environ["TORCH_CUDA_ARCH_LIST"] = CUDA_ARCH_LIST
+    os.environ["PATH"] = f"{Path(sys.executable).parent}:{os.environ['PATH']}"
+    build_dir = CUDA_DIR / "build_v9"
+    build_dir.mkdir(parents=True, exist_ok=True)
+    return load(
+        name="tq4_cuda_v9_ext",
+        sources=[
+            str(CUDA_DIR / "tq4_cuda_v9_bind.cpp"),
+            str(CUDA_DIR / "tq4_cuda_v9.cu"),
+        ],
+        extra_cflags=["-O3"],
+        extra_cuda_cflags=["-O3", "-lineinfo", "--use_fast_math"],
+        build_directory=str(build_dir),
+        with_cuda=True,
+        verbose=True,
+    )
+
+
 def main():
     args = parse_args()
     device = torch.device("cuda")
@@ -231,6 +251,7 @@ def main():
     mid_cuda_v6 = torch.empty_like(mid_aos)
     mid_cuda_v7 = torch.empty_like(mid_aos)
     mid_cuda_v8 = torch.empty_like(mid_aos)
+    mid_cuda_v9 = torch.empty_like(mid_aos)
     cuda_ext = None
     if args.include_cuda:
         from tools.cuda_v1_diagnostic import build_extension
@@ -243,6 +264,7 @@ def main():
     cuda_v6_ext = build_cuda_v6_extension() if args.include_cuda_v6 else None
     cuda_v7_ext = build_cuda_v7_extension() if args.include_cuda_v7 else None
     cuda_v8_ext = build_cuda_v8_extension() if args.include_cuda_v8 else None
+    cuda_v9_ext = build_cuda_v9_extension() if args.include_cuda_v9 else None
 
     def run_aos():
         launch_aos_v1_stage1(
@@ -363,6 +385,17 @@ def main():
             mid_cuda_v8,
         )
 
+    def run_cuda_v9():
+        assert cuda_v9_ext is not None
+        cuda_v9_ext.tq4_cuda_v9(
+            q_rot,
+            soa_cache,
+            block_table,
+            seq_lens,
+            centroids,
+            mid_cuda_v9,
+        )
+
     print("Compiling and checking outputs...")
     run_aos()
     run_soa_v1()
@@ -383,6 +416,8 @@ def main():
         run_cuda_v7()
     if args.include_cuda_v8:
         run_cuda_v8()
+    if args.include_cuda_v9:
+        run_cuda_v9()
     torch.cuda.synchronize()
     outputs = [
         ("AoS Triton V1", mid_aos),
@@ -405,6 +440,8 @@ def main():
         outputs.append(("CUDA V7", mid_cuda_v7))
     if args.include_cuda_v8:
         outputs.append(("CUDA V8", mid_cuda_v8))
+    if args.include_cuda_v9:
+        outputs.append(("CUDA V9", mid_cuda_v9))
     for name, output in outputs:
         if not bool(torch.isfinite(output).all()):
             raise RuntimeError(f"{name} produced NaN/Inf")
@@ -430,6 +467,8 @@ def main():
         comparisons.append(("CUDA V7", mid_cuda_v7))
     if args.include_cuda_v8:
         comparisons.append(("CUDA V8", mid_cuda_v8))
+    if args.include_cuda_v9:
+        comparisons.append(("CUDA V9", mid_cuda_v9))
     for name, output in comparisons:
         out_max, out_mean = diff_stats(
             mid_soa_v1[..., :HEAD_DIM],
@@ -464,6 +503,8 @@ def main():
         runners.append(("CUDA V7", run_cuda_v7))
     if args.include_cuda_v8:
         runners.append(("CUDA V8", run_cuda_v8))
+    if args.include_cuda_v9:
+        runners.append(("CUDA V9", run_cuda_v9))
     samples = {name: [] for name, _ in runners}
     for round_idx in range(args.rounds):
         order = runners[round_idx % len(runners) :] + runners[: round_idx % len(runners)]
@@ -542,6 +583,14 @@ def main():
             print(f"CUDA V8 vs V2-fixed    : {1.0 / v8_ratio:.3f}x faster")
         if args.include_cuda_v7:
             print(f"CUDA V8 vs CUDA V7     : {medians['CUDA V7'] / medians['CUDA V8']:.3f}x")
+    if args.include_cuda_v9:
+        v9_ratio = medians["CUDA V9"] / medians["SoA Triton V2-fixed"]
+        if v9_ratio >= 1.0:
+            print(f"CUDA V9 / V2-fixed     : {v9_ratio:.3f}x slower")
+        else:
+            print(f"CUDA V9 vs V2-fixed    : {1.0 / v9_ratio:.3f}x faster")
+        if args.include_cuda_v8:
+            print(f"CUDA V9 vs CUDA V8     : {medians['CUDA V8'] / medians['CUDA V9']:.3f}x")
 
 
 if __name__ == "__main__":
