@@ -48,9 +48,9 @@ Run these commands from the repository root. The first CUDA run JIT-compiles
 the extension and can take a few minutes.
 
 ```bash
-./run.sh smoke       # short Triton/CUDA V7 correctness and timing
+./run.sh smoke       # short Triton/CUDA V7-V8 correctness and timing
 ./run.sh store       # raw Q/K/V -> vLLM Store -> both decoders
-./run.sh benchmark   # official Triton and CUDA V1-V7 measurements
+./run.sh benchmark   # official Triton and CUDA V1-V8 measurements
 ```
 
 The runner works from any current directory and accepts `PYTHON` and
@@ -91,7 +91,7 @@ The authoritative baseline command is:
 python -B -m benchmarks.stage1 \
   --include-cuda --include-cuda-v2 --include-cuda-v3 \
   --include-cuda-v4 --include-cuda-v5 --include-cuda-v6 \
-  --include-cuda-v7
+  --include-cuda-v7 --include-cuda-v8
 ```
 
 The harness builds one logical cache, converts it losslessly between SoA and
@@ -102,26 +102,27 @@ Current RTX 4090 results, compiled natively for `sm_89` (2026-08-15):
 
 | Implementation | Stage1 median | Role |
 | --- | ---: | --- |
-| AoS Triton V1 | 1.679872 ms | Production/reference baseline |
-| SoA Triton V1 | 1.279396 ms | Layout ablation |
-| SoA Triton V2-fixed | 1.075538 ms | Strong baseline and primary target |
-| CUDA V1 | 2.069770 ms | First CUDA candidate |
-| CUDA V2 | 1.745438 ms | Warp-per-Q experiment |
-| CUDA V3 | 1.380291 ms | Single-pass Tensor Core candidate |
-| CUDA V4 | 1.121321 ms | Fixed-workload `sm_89` candidate |
-| CUDA V5 | 0.845220 ms | Direct WMMA register writeback candidate |
-| CUDA V6 | 0.638708 ms | Vectorized INT4 decode candidate |
-| CUDA V7 | 0.630999 ms | Fused tile-barrier candidate |
+| AoS Triton V1 | 1.672294 ms | Production/reference baseline |
+| SoA Triton V1 | 1.276106 ms | Layout ablation |
+| SoA Triton V2-fixed | 1.075814 ms | Strong baseline and primary target |
+| CUDA V1 | 2.069760 ms | First CUDA candidate |
+| CUDA V2 | 1.745265 ms | Warp-per-Q experiment |
+| CUDA V3 | 1.380351 ms | Single-pass Tensor Core candidate |
+| CUDA V4 | 1.121577 ms | Fixed-workload `sm_89` candidate |
+| CUDA V5 | 0.845466 ms | Direct WMMA register writeback candidate |
+| CUDA V6 | 0.638740 ms | Vectorized INT4 decode candidate |
+| CUDA V7 | 0.631153 ms | Fused tile-barrier candidate |
+| CUDA V8 | 0.513133 ms | Native `m16n8k16` GQA-4 candidate |
 
 Measured improvements:
 
 ```text
-AoS V1 -> SoA V1       1.313x
-SoA V1 -> V2-fixed     1.190x
-AoS V1 -> V2-fixed     1.562x
+AoS V1 -> SoA V1       1.310x
+SoA V1 -> V2-fixed     1.186x
+AoS V1 -> V2-fixed     1.554x
 CUDA V1 -> CUDA V2     1.186x
 CUDA V1 vs V2-fixed    1.924x slower
-CUDA V2 vs V2-fixed    1.623x slower
+CUDA V2 vs V2-fixed    1.622x slower
 CUDA V2 -> CUDA V3     1.265x
 CUDA V3 vs V2-fixed    1.283x slower
 CUDA V3 -> CUDA V4     1.231x
@@ -132,6 +133,8 @@ CUDA V5 -> CUDA V6     1.324x
 CUDA V6 vs V2-fixed    1.684x faster
 CUDA V6 -> CUDA V7     1.012x
 CUDA V7 vs V2-fixed    1.705x faster
+CUDA V7 -> CUDA V8     1.230x
+CUDA V8 vs V2-fixed    2.097x faster
 ```
 
 Correctness against SoA Triton V1 on the full Stage1 output:
@@ -146,6 +149,7 @@ CUDA V4 output max abs      9.68e-05
 CUDA V5 output max abs      9.68e-05
 CUDA V6 output max abs      9.68e-05
 CUDA V7 output max abs      9.68e-05
+CUDA V8 output max abs      9.68e-05
 ```
 
 ## Version And Entry-Point Map
@@ -162,10 +166,13 @@ does not mean that every historical version has three decode stages:
 | `tq4_cuda_v5.cu` | yes | - | - | direct fragment writeback |
 | `tq4_cuda_v6.cu` | yes | - | - | vectorized packed-cache decode |
 | `tq4_cuda_v7.cu` | yes | yes | yes | fused barriers plus complete decode |
+| `tq4_cuda_v8.cu` | yes | - | - | native `m16n8k16` GQA-4 Tensor Core path |
 
 V4 through V7 select compile-time optimizations and include the shared Stage1
 implementation from `cuda/tq4_cuda_stage1_template.cuh`. The template is not
-another benchmark version. V7 exports three explicit Python entry points:
+another benchmark version. V8 is an independent Stage1 implementation because
+its transposed `m16n8k16` fragment layout differs from the WMMA template. V7
+exports three explicit Python entry points:
 
 ```text
 tq4_cuda_v7_stage1(...)  -> Stage1 only; produces mid_o
@@ -193,12 +200,12 @@ Five-round RTX 4090 `sm_89` medians:
 
 | Implementation | Stage1 | Stage2 | Full decode |
 | --- | ---: | ---: | ---: |
-| Triton V2-fixed | 1.066998 ms | 0.024034 ms | 1.104118 ms |
-| CUDA V7 | 0.631265 ms | 0.008868 ms | 0.664801 ms |
+| Triton V2-fixed | 1.068268 ms | 0.023765 ms | 1.105396 ms |
+| CUDA V7 | 0.631047 ms | 0.008888 ms | 0.664608 ms |
 
 ```text
-CUDA V7 full vs Triton full  1.661x faster
-CUDA Stage2 share             1.33% of full decode
+CUDA V7 full vs Triton full  1.663x faster
+CUDA Stage2 share             1.34% of full decode
 ```
 
 Final-output correctness against the Triton complete decode:
@@ -341,6 +348,24 @@ CUDA V7: 49 registers/thread, 14224 B shared/CTA
 CUDA V7: 34 static BAR.SYNC sites, 1.705x faster than V2-fixed
 ```
 
+CUDA V8 replaces the C++ WMMA `m16n16k16` path with native
+`mma.sync.m16n8k16`. Four adjacent KV heads cannot be stacked as 16 Q rows in
+one dense MMA because each GQA group has a different K/V matrix. V8 instead
+transposes both products within each valid group: QK computes
+`K(16x16) * Q^T(16x8)`, and PV computes `V^T(16x16) * P(16x8)`. The four real
+Q heads occupy four of eight N columns instead of four of sixteen M rows.
+
+This halves the static HMMA sites, stores only four Q rows in shared memory,
+halves QK scratch, and halves each PV accumulator fragment. Direct PTX fragment
+loads cost two extra registers per thread, but the net Stage1 result is 1.230x
+faster than V7.
+
+```text
+CUDA V8: 51 registers/thread, 10336 B shared/CTA
+CUDA V8: 80 static HMMA sites, 34 static BAR.SYNC sites
+CUDA V8: 1.230x faster than V7, 2.097x faster than V2-fixed
+```
+
 ## Directory Map
 
 | Path | Role | Start here |
@@ -376,6 +401,8 @@ CUDA V7: 34 static BAR.SYNC sites, 1.705x faster than V2-fixed
   the fixed 128-byte slot layout satisfies that contract.
 - CUDA V7 relies on the next tile's metadata barrier to protect the preceding
   PV inputs before K/V shared storage is overwritten.
+- CUDA V8 is a Stage1-only, `sm_89`-specific inline-PTX experiment. It keeps
+  V7's fixed 128-token split and four-byte packed-cache alignment contracts.
 - CUDA V3 scales WMMA accumulator fragments in registers using the empirically
   verified `sm_89` lane-to-row mapping. `cuda/wmma_fragment_probe.cu` reproduces
   that mapping. Treat this code path as architecture-specific until it is
@@ -388,6 +415,6 @@ CUDA V7: 34 static BAR.SYNC sites, 1.705x faster than V2-fixed
 - The copied backend's logical cache shape declaration is head-major, while
   its store/decode launchers treat dimensions as position-major. Resolve that
   production integration contract before upstreaming a CUDA kernel.
-- The repository does not yet integrate CUDA V7 into the production vLLM
+- The repository does not yet integrate CUDA V7/V8 into the production vLLM
   backend; the standalone fixed-workload harness is the current integration
   boundary.
