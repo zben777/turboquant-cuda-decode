@@ -3,6 +3,9 @@
 本目录保存分析原始 SoA Triton V2 kernel 时生成的 Nsight Compute 报告和
 SASS 导出。
 
+这些二进制报告采集自原来的 RTX 3090 (`sm_86`) 环境，仅作为历史材料保留；
+当前代码、CUDA extension 和正式结果均已迁移到 RTX 4090 (`sm_89`)。
+
 这些文件生成于 **V2 correctness 修复之前**。当时被 profile 的 kernel
 因为 `tl.interleave` 路径存在静默的 V 列置换，因此旧的约 `2.29 ms` 时间
 不能作为有效性能 baseline。其访存和指令观察仍可作为历史诊断材料，但精确

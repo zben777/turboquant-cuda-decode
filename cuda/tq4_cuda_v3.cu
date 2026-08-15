@@ -88,7 +88,7 @@ __global__ __launch_bounds__(THREADS) void tq4_cuda_v3_kernel(
         reinterpret_cast<__half *>(p_s)[i] = __float2half(0.0f);
     }
     __syncthreads();
-    // Single-pass online softmax. WMMA accumulator row ownership on sm_86:
+    // Single-pass online softmax. WMMA accumulator row ownership on sm_89:
     // row = lane / 4 + ((fragment_element & 2) ? 8 : 0).
     wmma::fragment<wmma::accumulator, 16, 16, 16, float> out0, out1;
     wmma::fill_fragment(out0, 0.0f);

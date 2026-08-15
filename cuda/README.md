@@ -21,15 +21,15 @@ Git 忽略；在仓库根目录执行 `./run.sh clean` 即可删除。
 
 | 版本 | 核心变化 | 固定 workload Stage1 |
 | --- | --- | ---: |
-| V1 | 一个 CTA 负责 `(batch, KV head, split)`，四个 GQA head 复用解码后的 K/V | 4.61 ms |
-| V2 | 每个 Q head 使用一个 warp，softmax 保留在 warp 内且无 CTA barrier，但重复解码 K/V | 4.04 ms |
-| V3 | 单遍 tiled online softmax，使用 WMMA Tensor Core 完成 QK/PV，累加器保留在 fragment 中 | 2.29 ms |
-| V4 | 特化固定 128-token split，register centroid LUT，展开 tile 循环 | 2.24 ms |
-| V5 | 从 WMMA fragment 把有效行直接写入 `mid_o`，移除大型 output scratch | 1.73 ms |
-| V6 | 使用对齐 `uint32` packed-cache load 和 `half2` 重建值 store | 1.41 ms |
-| V7 | 合并相邻 tile 的同步，并加入 CUDA Stage2 和 Full Decode launcher | 1.40 ms |
+| V1 | 一个 CTA 负责 `(batch, KV head, split)`，四个 GQA head 复用解码后的 K/V | 2.069770 ms |
+| V2 | 每个 Q head 使用一个 warp，softmax 保留在 warp 内且无 CTA barrier，但重复解码 K/V | 1.745438 ms |
+| V3 | 单遍 tiled online softmax，使用 WMMA Tensor Core 完成 QK/PV，累加器保留在 fragment 中 | 1.380291 ms |
+| V4 | 特化固定 128-token split，register centroid LUT，展开 tile 循环 | 1.121321 ms |
+| V5 | 从 WMMA fragment 把有效行直接写入 `mid_o`，移除大型 output scratch | 0.845220 ms |
+| V6 | 使用对齐 `uint32` packed-cache load 和 `half2` 重建值 store | 0.638708 ms |
+| V7 | 合并相邻 tile 的同步，并加入 CUDA Stage2 和 Full Decode launcher | 0.630999 ms |
 
-这些是 RTX 3090 固定 workload 下的代表性中位数；根 README 的实测表是正式
+这些是 RTX 4090 原生 `sm_89` 固定 workload 下的五轮中位数；根 README 的实测表是正式
 记录。V1-V7 表示优化历史，不是 production API 版本号。
 
 V1、V2 各自拥有完整的 `.cu` 实现。V3 也是独立实现，并首次建立 Tensor
@@ -64,7 +64,7 @@ CUDA kernel 不提供 grid-wide barrier；保留 kernel 边界可以明确表达
 
 ## 诊断文件
 
-`wmma_fragment_probe.cu` 用于恢复并验证 `sm_86` WMMA accumulator 的
+`wmma_fragment_probe.cu` 用于恢复并验证 `sm_89` WMMA accumulator 的
 lane-to-row 映射，V5 的 fragment 直接写回依赖该结论。它是开发诊断程序，
 不参与 benchmark 或 Full Decode 链路。
 
@@ -98,7 +98,7 @@ tq4_cuda_v7.cu
 
 - V3-V7 面向根 README 记录的固定 Qwen3-4B-shaped workload。
 - V4-V7 要求每个 split 是对齐的 128 个 token。
-- V5-V7 依赖实验验证的 `sm_86` WMMA fragment mapping。
+- V5-V7 依赖实验验证的 `sm_89` WMMA fragment mapping。
 - V6-V7 要求 packed cache 地址满足四字节对齐。
 - 这些 kernel 目前是研究 extension，尚未注册成可直接替换的 vLLM
   attention backend。

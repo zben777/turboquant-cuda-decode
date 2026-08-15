@@ -25,10 +25,10 @@ benchmark load the reference kernels without depending on a full vLLM install.
 The recorded results were collected with the following environment:
 
 ```text
-GPU             NVIDIA RTX 3090 (sm_86)
-Python          3.11
-PyTorch         2.9.1+cu128
-Triton          3.5.1
+GPU             NVIDIA RTX 4090 (sm_89)
+Python          3.11.15
+PyTorch         2.5.1+cu121
+Triton          3.7.1
 Ninja           1.13.0
 CUDA compiler   12.2
 ```
@@ -68,7 +68,7 @@ for that code.
 
 | Parameter | Value |
 | --- | ---: |
-| GPU used for current results | NVIDIA RTX 3090 (`sm_86`) |
+| GPU used for current results | NVIDIA RTX 4090 (`sm_89`) |
 | Batch | 64 |
 | Context length | 4096 |
 | Q heads / KV heads | 32 / 8 |
@@ -98,54 +98,54 @@ The harness builds one logical cache, converts it losslessly between SoA and
 AoS, rotates measurement order across five rounds, and reports medians over
 100 CUDA-event-timed launches per round.
 
-Current RTX 3090 results (2026-08-14):
+Current RTX 4090 results, compiled natively for `sm_89` (2026-08-15):
 
 | Implementation | Stage1 median | Role |
 | --- | ---: | --- |
-| AoS Triton V1 | 3.407176 ms | Production/reference baseline |
-| SoA Triton V1 | 3.207219 ms | Layout ablation |
-| SoA Triton V2-fixed | 2.795724 ms | Strong baseline and primary target |
-| CUDA V1 | 4.602296 ms | First CUDA candidate |
-| CUDA V2 | 4.024474 ms | Warp-per-Q experiment |
-| CUDA V3 | 2.303662 ms | Single-pass Tensor Core candidate |
-| CUDA V4 | 2.251817 ms | Fixed-workload `sm_86` candidate |
-| CUDA V5 | 1.724498 ms | Direct WMMA register writeback candidate |
-| CUDA V6 | 1.409382 ms | Vectorized INT4 decode candidate |
-| CUDA V7 | 1.392732 ms | Fused tile-barrier candidate |
+| AoS Triton V1 | 1.679872 ms | Production/reference baseline |
+| SoA Triton V1 | 1.279396 ms | Layout ablation |
+| SoA Triton V2-fixed | 1.075538 ms | Strong baseline and primary target |
+| CUDA V1 | 2.069770 ms | First CUDA candidate |
+| CUDA V2 | 1.745438 ms | Warp-per-Q experiment |
+| CUDA V3 | 1.380291 ms | Single-pass Tensor Core candidate |
+| CUDA V4 | 1.121321 ms | Fixed-workload `sm_89` candidate |
+| CUDA V5 | 0.845220 ms | Direct WMMA register writeback candidate |
+| CUDA V6 | 0.638708 ms | Vectorized INT4 decode candidate |
+| CUDA V7 | 0.630999 ms | Fused tile-barrier candidate |
 
 Measured improvements:
 
 ```text
-AoS V1 -> SoA V1       1.062x
-SoA V1 -> V2-fixed     1.147x
-AoS V1 -> V2-fixed     1.219x
-CUDA V1 -> CUDA V2     1.144x
-CUDA V1 vs V2-fixed    1.646x slower
-CUDA V2 vs V2-fixed    1.440x slower
-CUDA V2 -> CUDA V3     1.747x
-CUDA V3 vs V2-fixed    1.214x faster
-CUDA V3 -> CUDA V4     1.023x
-CUDA V4 vs V2-fixed    1.242x faster
-CUDA V4 -> CUDA V5     1.306x
-CUDA V5 vs V2-fixed    1.621x faster
-CUDA V5 -> CUDA V6     1.224x
-CUDA V6 vs V2-fixed    1.984x faster
+AoS V1 -> SoA V1       1.313x
+SoA V1 -> V2-fixed     1.190x
+AoS V1 -> V2-fixed     1.562x
+CUDA V1 -> CUDA V2     1.186x
+CUDA V1 vs V2-fixed    1.924x slower
+CUDA V2 vs V2-fixed    1.623x slower
+CUDA V2 -> CUDA V3     1.265x
+CUDA V3 vs V2-fixed    1.283x slower
+CUDA V3 -> CUDA V4     1.231x
+CUDA V4 vs V2-fixed    1.043x slower
+CUDA V4 -> CUDA V5     1.326x
+CUDA V5 vs V2-fixed    1.272x faster
+CUDA V5 -> CUDA V6     1.324x
+CUDA V6 vs V2-fixed    1.684x faster
 CUDA V6 -> CUDA V7     1.012x
-CUDA V7 vs V2-fixed    2.007x faster
+CUDA V7 vs V2-fixed    1.705x faster
 ```
 
 Correctness against SoA Triton V1 on the full Stage1 output:
 
 ```text
-AoS V1 output max abs       1.21e-05
-V2-fixed output max abs     8.46e-05
-CUDA V1 output max abs      6.56e-07
-CUDA V2 output max abs      7.15e-07
-CUDA V3 output max abs      8.46e-05
-CUDA V4 output max abs      8.46e-05
-CUDA V5 output max abs      8.46e-05
-CUDA V6 output max abs      8.46e-05
-CUDA V7 output max abs      8.46e-05
+AoS V1 output max abs       1.28e-05
+V2-fixed output max abs     9.68e-05
+CUDA V1 output max abs      6.85e-07
+CUDA V2 output max abs      6.85e-07
+CUDA V3 output max abs      9.68e-05
+CUDA V4 output max abs      9.68e-05
+CUDA V5 output max abs      9.68e-05
+CUDA V6 output max abs      9.68e-05
+CUDA V7 output max abs      9.68e-05
 ```
 
 ## Version And Entry-Point Map
@@ -189,16 +189,16 @@ Here, "complete decode" means pre-rotated `q_rot` plus compressed KV through
 Stage1 and Stage2 to the final `[B,Hq,D]` attention output and `[B,Hq]` LSE.
 Query rotation and cache store remain outside the benchmark.
 
-Five-round RTX 3090 medians:
+Five-round RTX 4090 `sm_89` medians:
 
 | Implementation | Stage1 | Stage2 | Full decode |
 | --- | ---: | ---: | ---: |
-| Triton V2-fixed | 2.773299 ms | 0.051436 ms | 2.825226 ms |
-| CUDA V7 | 1.392681 ms | 0.044339 ms | 1.436283 ms |
+| Triton V2-fixed | 1.066998 ms | 0.024034 ms | 1.104118 ms |
+| CUDA V7 | 0.631265 ms | 0.008868 ms | 0.664801 ms |
 
 ```text
-CUDA V7 full vs Triton full  1.967x faster
-CUDA Stage2 share             3.09% of full decode
+CUDA V7 full vs Triton full  1.661x faster
+CUDA Stage2 share             1.33% of full decode
 ```
 
 Final-output correctness against the Triton complete decode:
@@ -206,7 +206,7 @@ Final-output correctness against the Triton complete decode:
 ```text
 CUDA Stage2 output max abs    2.38e-07
 CUDA Stage2 LSE max abs       9.54e-07
-CUDA V7 full output max abs   5.96e-07
+CUDA V7 full output max abs   5.66e-07
 CUDA V7 full LSE max abs      9.54e-07
 ```
 
@@ -229,19 +229,19 @@ python -B -m validation.store_decode
 ```
 
 No cache conversion or byte rearrangement occurs between Store and Decode.
-RTX 3090 correctness results:
+RTX 4090 `sm_89` correctness results:
 
 ```text
-CUDA V7 vs Triton output max/mean  4.4517219e-06 / 1.3544668e-07
-CUDA V7 vs Triton LSE    max/mean  9.5367432e-07 / 2.5099143e-07
+CUDA V7 vs Triton output max/mean  5.0617382e-06 / 1.3898631e-07
+CUDA V7 vs Triton LSE    max/mean  9.5367432e-07 / 2.4447218e-07
 ```
 
 For sequence 0, the same test also compares quantized Triton decode with
 attention computed from the original, unquantized FP32 Q/K/V:
 
 ```text
-Quantization output max/mean  0.013347317 / 0.0027882606
-Quantization LSE    max/mean  0.0039367676 / 0.0016208589
+Quantization output max/mean  0.018739756 / 0.0028449418
+Quantization LSE    max/mean  0.0064659119 / 0.0024851561
 ```
 
 The much smaller CUDA-vs-Triton difference shows that CUDA V7 correctly
@@ -278,27 +278,27 @@ CUDA V2: 40 registers/thread,    0 B shared/CTA,  5 SHFL.DOWN sites
 ```
 
 The tradeoff is four-way repeated K/V loads and dequantization. The experiment
-improves Stage1 by about 15%, but remains 1.440x slower than V2-fixed.
+improves Stage1 by 1.186x, but remains 1.623x slower than V2-fixed.
 
 CUDA V3 now follows the Triton execution graph in one 16-token tile loop:
 dequantize K/V, compute grouped QK, update online softmax, rescale the PV
 accumulator by row, and compute PV. The accumulator remains in WMMA registers
 across all eight tiles. This removes the original two-pass score/weight staging
-and improves over CUDA V2 by 1.747x. It is 1.214x faster than V2-fixed, with
-the same expected FP16 Tensor Core error scale.
+and improves over CUDA V2 by 1.265x. It remains 1.283x slower than V2-fixed on
+RTX 4090, with the same expected FP16 Tensor Core error scale.
 
 Static cubin inspection confirms actual Tensor Core code generation:
 
 ```text
-CUDA V3: 66 registers/thread, 21408 B shared/CTA
+CUDA V3: 59 registers/thread, 21408 B shared/CTA
 CUDA V3: 20 static HMMA.16816.F32 instruction sites
 ```
 
 CUDA V4 keeps the V3 online-softmax design and specializes it further for the
 fixed aligned workload. It performs one block-table load per 16-token tile,
 initializes only the four real Q rows, uses a warp-register centroid LUT, and
-fully unrolls the eight tile iterations. The result is a further 1.023x over
-V3 and 1.242x over V2-fixed.
+fully unrolls the eight tile iterations. The result is a further 1.231x over
+V3 and remains 1.043x slower than V2-fixed.
 
 ```text
 CUDA V4: 58 registers/thread, 21408 B shared/CTA
@@ -309,14 +309,14 @@ The V4 static counts include all eight fully unrolled tile iterations; they do
 not represent additional runtime MMA or barriers relative to the loop body.
 
 CUDA V5 removes V4's full `16x128` shared-memory output scratch. The verified
-`sm_86` WMMA row/column mapping lets the first four valid accumulator rows be
+`sm_89` WMMA row/column mapping lets the first four valid accumulator rows be
 written directly from fragment registers to their final `mid_o` addresses.
 The Tensor Core work is unchanged, but shared memory drops by about 7 KB and
 the full accumulator shared store/reload path disappears.
 
 ```text
-CUDA V5: 58 registers/thread, 14224 B shared/CTA
-CUDA V5: 1.306x faster than V4, 1.621x faster than V2-fixed
+CUDA V5: 50 registers/thread, 14224 B shared/CTA
+CUDA V5: 1.326x faster than V4, 1.272x faster than V2-fixed
 ```
 
 CUDA V6 keeps V5's direct register writeback and vectorizes the packed-cache
@@ -326,8 +326,8 @@ reduces load, address-generation, and shared-store instruction counts without
 changing occupancy or Tensor Core work.
 
 ```text
-CUDA V6: 58 registers/thread, 14224 B shared/CTA
-CUDA V6: 1.224x faster than V5, 1.984x faster than V2-fixed
+CUDA V6: 50 registers/thread, 14224 B shared/CTA
+CUDA V6: 1.324x faster than V5, 1.684x faster than V2-fixed
 ```
 
 CUDA V7 removes the barrier at the end of each tile. The following tile's
@@ -337,8 +337,8 @@ metadata. This reduces executed CTA barriers from 42 to 34 without changing
 the cache, WMMA, or occupancy configuration.
 
 ```text
-CUDA V7: 58 registers/thread, 14224 B shared/CTA
-CUDA V7: 34 static BAR.SYNC sites, 2.007x faster than V2-fixed
+CUDA V7: 49 registers/thread, 14224 B shared/CTA
+CUDA V7: 34 static BAR.SYNC sites, 1.705x faster than V2-fixed
 ```
 
 ## Directory Map
@@ -369,7 +369,7 @@ CUDA V7: 34 static BAR.SYNC sites, 2.007x faster than V2-fixed
   than a general production kernel.
 - CUDA V4 requires exactly 128 aligned tokens per split. It deliberately trades
   general sequence/split support for the fixed-workload fast path.
-- CUDA V5 inherits V4's fixed-workload and `sm_86` fragment-mapping constraints.
+- CUDA V5 inherits V4's fixed-workload and `sm_89` fragment-mapping constraints.
   Its direct writeback must be re-derived and tested before targeting another
   GPU architecture.
 - CUDA V6 additionally assumes four-byte alignment for packed K/V vector loads;
@@ -377,7 +377,7 @@ CUDA V7: 34 static BAR.SYNC sites, 2.007x faster than V2-fixed
 - CUDA V7 relies on the next tile's metadata barrier to protect the preceding
   PV inputs before K/V shared storage is overwritten.
 - CUDA V3 scales WMMA accumulator fragments in registers using the empirically
-  verified `sm_86` lane-to-row mapping. `cuda/wmma_fragment_probe.cu` reproduces
+  verified `sm_89` lane-to-row mapping. `cuda/wmma_fragment_probe.cu` reproduces
   that mapping. Treat this code path as architecture-specific until it is
   replaced by an explicit inline `mma.sync` register contract.
 - Synthetic pages are contiguous and all sequences have length 4096. The fixed

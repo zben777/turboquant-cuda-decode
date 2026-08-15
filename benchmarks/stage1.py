@@ -22,6 +22,9 @@ from baseline.triton_v1 import (
 from baseline.triton_v2 import launch_tq4_v2_stage1
 
 
+CUDA_ARCH_LIST = "8.9"
+
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CUDA_DIR = PROJECT_ROOT / "cuda"
 
@@ -61,7 +64,7 @@ def parse_args():
 
 
 def build_cuda_v2_extension():
-    os.environ.setdefault("TORCH_CUDA_ARCH_LIST", "8.6")
+    os.environ["TORCH_CUDA_ARCH_LIST"] = CUDA_ARCH_LIST
     os.environ["PATH"] = f"{Path(sys.executable).parent}:{os.environ['PATH']}"
     build_dir = CUDA_DIR / "build_v2"
     build_dir.mkdir(parents=True, exist_ok=True)
@@ -80,7 +83,7 @@ def build_cuda_v2_extension():
 
 
 def build_cuda_v3_extension():
-    os.environ.setdefault("TORCH_CUDA_ARCH_LIST", "8.6")
+    os.environ["TORCH_CUDA_ARCH_LIST"] = CUDA_ARCH_LIST
     os.environ["PATH"] = f"{Path(sys.executable).parent}:{os.environ['PATH']}"
     build_dir = CUDA_DIR / "build_v3"
     build_dir.mkdir(parents=True, exist_ok=True)
@@ -99,7 +102,7 @@ def build_cuda_v3_extension():
 
 
 def build_cuda_v4_extension():
-    os.environ.setdefault("TORCH_CUDA_ARCH_LIST", "8.6")
+    os.environ["TORCH_CUDA_ARCH_LIST"] = CUDA_ARCH_LIST
     os.environ["PATH"] = f"{Path(sys.executable).parent}:{os.environ['PATH']}"
     build_dir = CUDA_DIR / "build_v4"
     build_dir.mkdir(parents=True, exist_ok=True)
@@ -118,7 +121,7 @@ def build_cuda_v4_extension():
 
 
 def build_cuda_v5_extension():
-    os.environ.setdefault("TORCH_CUDA_ARCH_LIST", "8.6")
+    os.environ["TORCH_CUDA_ARCH_LIST"] = CUDA_ARCH_LIST
     os.environ["PATH"] = f"{Path(sys.executable).parent}:{os.environ['PATH']}"
     build_dir = CUDA_DIR / "build_v5"
     build_dir.mkdir(parents=True, exist_ok=True)
@@ -137,7 +140,7 @@ def build_cuda_v5_extension():
 
 
 def build_cuda_v6_extension():
-    os.environ.setdefault("TORCH_CUDA_ARCH_LIST", "8.6")
+    os.environ["TORCH_CUDA_ARCH_LIST"] = CUDA_ARCH_LIST
     os.environ["PATH"] = f"{Path(sys.executable).parent}:{os.environ['PATH']}"
     build_dir = CUDA_DIR / "build_v6"
     build_dir.mkdir(parents=True, exist_ok=True)
@@ -156,7 +159,7 @@ def build_cuda_v6_extension():
 
 
 def build_cuda_v7_extension():
-    os.environ.setdefault("TORCH_CUDA_ARCH_LIST", "8.6")
+    os.environ["TORCH_CUDA_ARCH_LIST"] = CUDA_ARCH_LIST
     os.environ["PATH"] = f"{Path(sys.executable).parent}:{os.environ['PATH']}"
     build_dir = CUDA_DIR / "build_v7"
     build_dir.mkdir(parents=True, exist_ok=True)

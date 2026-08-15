@@ -2,11 +2,8 @@ import os
 from pathlib import Path
 
 
-# RTX 3090 = sm_86
-os.environ.setdefault(
-    "TORCH_CUDA_ARCH_LIST",
-    "8.6",
-)
+# RTX 4090 = sm_89
+os.environ["TORCH_CUDA_ARCH_LIST"] = "8.9"
 
 import torch
 
