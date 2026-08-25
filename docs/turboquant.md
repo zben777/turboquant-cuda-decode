@@ -40,7 +40,7 @@ y=Rx,
 它越集中；经过适当缩放后才近似 Gaussian：
 
 \[
-\sqrt d\,y_i \xrightarrow[d\to\infty]{distribution} \mathcal N(0,1),
+\sqrt d\,y_i \xrightarrow[d\to\infty]{\text{distribution}} \mathcal N(0,1),
 \]
 
 也就是：
@@ -705,7 +705,7 @@ s_v=(2-(-1))/15=0.2,
 对于 (v=0.37)：
 
 \[
-q=round((0.37+1)/0.2)=round(6.85)=7,
+q=\operatorname{round}((0.37+1)/0.2)=\operatorname{round}(6.85)=7,
 \]
 
 重建为：
@@ -1159,9 +1159,9 @@ QJL correction term
 
 > TurboQuant 先把每个 K 向量归一化，再做正交旋转。论文中随机旋转使单位
 > 向量在球面上均匀，单 coordinate 呈对称 Beta 型分布，高维下近似
-> (N(0,1/d))，有限坐标也近似独立，所以能用同一个 Lloyd-Max scalar
+> $\mathcal N(0,1/d)$，有限坐标也近似独立，所以能用同一个 Lloyd-Max scalar
 > quantizer 逐维编码。vLLM 不从真实 KV 训练 codebook，而是直接对
-> (N(0,1/d)) 的 PDF 数值积分，生成 4-bit 时的 16 个 centroid。K cache
+> $\mathcal N(0,1/d)$ 的 PDF 数值积分，生成 4-bit 时的 16 个 centroid。K cache
 > 保存 centroid index 和一个 FP16 corrected norm；V 使用 per-token/head
 > uniform INT4，保存 scale 和 zero。论文的 TurboQuant-Prod 还会对 MSE
 > residual 做 1-bit QJL 来获得无偏内积估计，但 QJL 不是 scale，当前 vLLM

@@ -668,6 +668,352 @@ cuobjdump 检查 register/shared/HMMA/barrier；对 V8 还要解释为什么新�
 比起背诵“用了 Shared Memory、Tensor Core、FlashInfer”，这种从问题、假设、
 实现、证据到限制的闭环更能体现性能工程能力。
 
+## 随机面试深挖题
+
+这一组故意不按知识章节排列，用于模拟面试官连续追问。回答时先给结论，再根据
+面试官反应补数学推导或 CUDA 细节。
+
+### 66. TurboQuant 为什么要在量化前对 K 做正交旋转？不旋转会有什么问题？
+
+原始 K 的能量可能集中在少数坐标，不同坐标的尺度和尾部也可能相差很大。如果
+直接用一套 4-bit scalar quantizer，少量异常值会迫使量化范围变宽，使大多数
+普通坐标只能使用很少的有效量化级，内积误差也会集中在这些高能量方向。
+
+TurboQuant 先归一化 K，再用正交变换把能量分散到各个坐标。正交变换保持范数，
+并且只要 Q 使用匹配变换，就保持精确内积。这样旋转后坐标具有统一、可预测的
+边缘分布，适合使用一套固定的 Lloyd-Max codebook。旋转并没有消灭量化误差，
+而是让有限的 16 个量化级被更均衡地使用。
+
+### 67. “向量在单位球面上均匀分布”是否表示每个坐标服从 Uniform distribution？
+
+不是。“球面均匀”指向量的方向相对于旋转不偏向任何方向，不是每个坐标都在
+`[-1, 1]` 上均匀分布。若 $Y$ 均匀分布在 $d$ 维单位球面 $S^{d-1}$ 上，单个
+坐标 $Y_i$ 的密度为：
+
+```math
+f(t)=\frac{\Gamma(d/2)}{\sqrt{\pi}\,\Gamma((d-1)/2)}
+     (1-t^2)^{(d-3)/2},\qquad -1\le t\le 1.
+```
+
+高维时密度强烈集中在 0 附近，显然不是平坦的 Uniform density。各坐标也不
+严格独立，因为始终满足 $\sum_i Y_i^2=1$。
+
+### 68. TurboQuant 中单个坐标的精确分布是什么？为什么可近似为 $N(0,1/d)$？
+
+对 Haar 随机正交旋转后的单位向量，有：
+
+```math
+Y_i^2\sim \operatorname{Beta}\left(\frac12,\frac{d-1}{2}\right).
+```
+
+等价地，平移后的变量满足：
+
+```math
+\frac{Y_i+1}{2}\sim
+\operatorname{Beta}\left(\frac{d-1}{2},\frac{d-1}{2}\right).
+```
+
+由球面对称性，$E[Y_i]=0$；又因为 $\sum_iY_i^2=1$ 且所有坐标地位相同，
+$E[Y_i^2]=1/d$。当 $d$ 增大时，$\sqrt d\,Y_i$ 依分布趋近 $N(0,1)$，所以
+$Y_i\approx N(0,1/d)$。这里说的是边缘分布近似；有限维坐标之间仍受单位范数
+约束，不能说成严格独立。
+
+### 69. vLLM 会从真实 KV Cache 采样数据来生成 codebook 吗？
+
+不会。vLLM 的 centroid 生成脚本直接把旋转后坐标近似为
+$N(0,1/d)$，根据这个理论概率密度做数值积分并迭代 Lloyd-Max 方程。它不是先
+收集几十万条真实 K，再运行 K-means，也不需要为每个模型做数据 calibration。
+
+具体过程是：给定 bit 数得到 $2^b$ 个 centroid，反复用相邻 centroid 中点更新
+decision boundary，再用每个区间中的条件期望更新 centroid，直到收敛。需要
+区分的是，论文的分布论证基于随机正交旋转；当前 vLLM 工程路径使用归一化
+Sylvester Hadamard 变换，并利用对称量化器省略随机符号翻转。
+
+### 70. `head_dim = 128` 时 Gaussian approximation 的方差和标准差是多少？
+
+```math
+\operatorname{Var}(Y_i)=\frac1{128}=0.0078125,
+\qquad
+\sigma=\frac1{\sqrt{128}}\approx0.0883883.
+```
+
+不要把这里的坐标标准差与 Attention 的缩放因子混为一个 metadata。二者数值
+都可能出现 $1/\sqrt{128}$，但前者用于构造理论分布，后者用于缩放 QK logits。
+
+### 71. 为什么 4-bit 正好需要 16 个 centroid？运行时保存什么？
+
+一个 4-bit 无符号 index 有 $2^4=16$ 种取值，因此 codebook 包含 16 个
+centroid。Store 时，每个旋转后坐标通过 15 个 decision boundary 落入一个
+区间，最终保存的是 `0..15` 的 centroid index，而不是 centroid 浮点值。
+
+两个 index 打包进一个 byte，所以 128 个坐标占 64 B。Decode 时取出 nibble，
+执行 `centroid[index]`，再乘 K 的校正 norm，恢复用于 QK 累加的近似坐标。
+
+### 72. Lloyd-Max 中相邻 centroid 的 decision boundary 怎么计算？
+
+在标量平方误差准则下，第 $i$ 和第 $i+1$ 个 centroid 之间的边界是二者中点：
+
+```math
+b_i=\frac{c_i+c_{i+1}}{2},\qquad i=0,\ldots,14.
+```
+
+因为在这个位置有 $(x-c_i)^2=(x-c_{i+1})^2$。运行时 bucketize 只需将输入和
+这 15 个 midpoint 比较，就能得到 4-bit index。
+
+### 73. Lloyd-Max 的新 centroid 为什么是区间条件均值而不是区间中点？
+
+固定量化区间 $[a,b]$ 后，要选择重建值 $c$ 最小化区间内期望平方误差：
+
+```math
+J(c)=\int_a^b(x-c)^2f(x)\,dx.
+```
+
+令导数为零：
+
+```math
+\frac{dJ}{dc}=-2\int_a^b(x-c)f(x)\,dx=0,
+```
+
+得到：
+
+```math
+c=\frac{\int_a^bxf(x)\,dx}{\int_a^bf(x)\,dx}=E[X\mid a\le X\le b].
+```
+
+只有当区间内概率密度关于中点对称或近似常数时，它才等于 $(a+b)/2$。Gaussian
+在尾部区间明显不均匀，因此简单取几何中点通常不是 MSE 最优重建值。
+
+### 74. TurboQuant 为什么可以使用固定 codebook，而不需要模型级 calibration？
+
+归一化去除了每个 K 向量的整体尺度，正交混合又使坐标边缘分布接近只由维度
+$d$ 决定的球面坐标分布。于是 codebook 可以针对理论近似
+$N(0,1/d)$ 离线求解，而不是针对某层、某模型的经验直方图求解。
+
+这是 TurboQuant 的设计优势，不代表所有真实数据都精确服从 Gaussian，也不
+代表固定 codebook 在任何任务上都必然优于校准量化。工程上仍需用模型质量和
+下游任务评估验证这种理论近似。
+
+### 75. 一个 FP16 Key 从输入到写入 4-bit KV Cache 经历什么？
+
+以 $K\in R^{128}$ 为例，主要数据流是：
+
+1. 以 FP32 累加计算原始二范数 $s=\lVert K\rVert_2$；
+2. 归一化得到 $u=K/s$，并处理极小范数的数值边界；
+3. 用正交矩阵或归一化 Hadamard 变换得到 $z=\Pi u$；
+4. 用 15 个 midpoint 对每个 $z_i$ bucketize，得到 128 个 4-bit index；
+5. 将 index 查回的 centroid 组成 $c$，计算其量化后范数 $\lVert c\rVert_2$；
+6. 开启 norm correction 时保存 $\gamma=s/\lVert c\rVert_2$；
+7. 每两个 index 打包为一个 byte，按 paged KV Cache 布局写入 64 B K payload；
+8. 将 FP16 `gamma` 写入该 token/KV-head 的 metadata。
+
+Decode 读出的近似旋转 K 是 $\hat K_r=\gamma c$。本项目随后直接在 tile 内参与
+QK，不生成完整的 Global Memory FP16 K buffer。
+
+### 76. K 的 `norm` 何时计算？它与 centroid 是什么关系？
+
+原始 norm $s=\lVert K\rVert_2$ 在 Store/量化阶段、归一化之前计算。Lloyd-Max
+centroid 是离线根据目标分布生成的一套全局常量，不由这个 norm 生成。
+
+开启 norm correction 后，实际保存的标量还会结合量化 centroid 向量的范数：
+
+```math
+\gamma_{stored}=\frac{\lVert K\rVert_2}{\lVert c\rVert_2}.
+```
+
+所以 centroid index 描述方向，保存的 norm 类 metadata 恢复幅值并补偿量化后
+方向向量的范数偏差。面试时不能把它说成 Lloyd-Max 的 scale 参数。
+
+### 77. `norm`、`scale` 和 `QJL` 是不是同一个东西？
+
+不是，它们处在不同路径并解决不同问题：
+
+| 名称 | 所在路径 | 作用 |
+|---|---|---|
+| K norm / corrected norm | K centroid quantization | 恢复 K 的整体幅值，并可补偿 centroid 向量范数 |
+| V scale/zero | V affine quantization | 将 `0..15` 的 uniform index 映射回 V 的动态范围 |
+| QJL residual channel | 论文 TurboQuant-Prod | 用随机投影符号和 residual norm 估计残差内积 |
+
+QJL 不是一个浮点 scale。当前本项目不含 QJL 的 4-bit 路径只保存 K norm、
+V scale 和 V zero，没有 QJL residual payload。
+
+### 78. TurboQuant-MSE 优化什么？TurboQuant-Prod 为什么引入 residual？
+
+TurboQuant-MSE 选择标量量化器来最小化旋转坐标的重建均方误差，目标可写成：
+
+```math
+E\left[\lVert x-\hat x_{mse}\rVert_2^2\right].
+```
+
+但 Attention 真正关心的是 query 与 key 的内积。即使 $\hat x_{mse}$ 已很好地
+重建 x，残差 $r=x-\hat x_{mse}$ 仍会产生 $q^Tr$，从而扰动 logits。
+TurboQuant-Prod 因此通常让主 MSE 通道使用 $b-1$ bit，并用额外 1 bit 的 QJL
+通道编码残差信息，目标更直接地降低或校正内积估计误差。
+
+### 79. TurboQuant-Prod 的 residual 如何处理？QJL 起什么作用？
+
+先计算主量化结果和残差：
+
+```math
+r=x-\hat x_{mse}.
+```
+
+QJL 使用随机投影得到 residual 的符号信息，并配合 residual norm 等 metadata，
+在查询时构造 $q^Tr$ 的低成本、无偏估计。最终内积由主通道和残差估计相加：
+
+```math
+q^Tx\approx q^T\hat x_{mse}+\widehat{q^Tr}.
+```
+
+因此 QJL 是 residual inner-product estimator，不是对 K 或 V 乘一次的普通
+scale，也不是 Lloyd-Max codebook 本身。
+
+### 80. 论文有 QJL，为什么当前 vLLM decode 可以不用？
+
+论文给出了包括 TurboQuant-Prod/QJL 在内的算法设计，但工程实现可以选择不同
+质量、显存和吞吐折中。当前 vLLM 的 TurboQuant backend 使用旋转、K centroid
+index/norm 与 V uniform scale/zero，不把 QJL residual 放进当前 decode cache
+contract。
+
+vLLM 文档还说明 QJL 估计方差会影响 softmax attention 的质量，因此当前实现
+有意省略该通道。这样 cache 布局和 decode 更简单、确定性更强，但不能把当前
+vLLM 路径描述为完整实现了论文所有变体。本项目跟随的也是不含 QJL 的路径。
+
+### 81. K 和 V 是否使用完全相同的量化方法？
+
+不是。K 路径是：归一化、正交/Hadamard 旋转、Lloyd-Max 非均匀 centroid
+quantization，并保存 4-bit index 和 corrected norm。V 路径通常不做这套
+centroid rotation，而是按向量求 `vmin/vmax`：
+
+```math
+scale=\max\left(\frac{v_{max}-v_{min}}{15},10^{-8}\right),
+\qquad zero=v_{min},
+```
+
+```math
+q=\operatorname{clip}\left(\operatorname{round}
+\frac{v-zero}{scale},0,15\right),
+\qquad \hat v=q\cdot scale+zero.
+```
+
+本项目每个 token/KV-head 保存 64 B K index、64 B V index，以及三个 FP16
+metadata：K corrected norm、V scale、V zero，总计 134 B。
+
+### 82. 为什么 K 适合 centroid quantization，而 V 可用 affine quantization？
+
+K 进入 QK 内积并进一步进入 softmax，logit 误差可能改变整行 attention weight；
+归一化和旋转后，K 坐标又具有可利用的稳定、近 Gaussian 分布，因此用针对该
+分布优化的非均匀 centroid 有明确动机。
+
+V 在 softmax 权重确定后参加加权和。工程上可以按每个 V 向量的实际
+`min/max` 使用简单 affine quantization，Decode 只需一次乘加，成本较低。
+这是一项算法与实现折中，不应表述为“V 对误差不敏感”或“V 永远不值得做
+非均匀量化”；最终仍要通过输出质量评估决定。
+
+### 83. K 被旋转后，为什么 Query 也必须做相应旋转？
+
+使用行向量约定，令：
+
+```math
+K_r=K\Pi^T,\qquad Q_r=Q\Pi^T,
+```
+
+其中 $\Pi$ 为正交矩阵，即 $\Pi^T\Pi=I$。那么：
+
+```math
+Q_rK_r^T
+=Q\Pi^T(K\Pi^T)^T
+=Q\Pi^T\Pi K^T
+=QK^T.
+```
+
+如果只旋转 K 而不旋转 Q，计算的是 $Q\Pi K^T$ 或其对应约定形式，不再等于
+原始 attention score。代码采用列向量时左右乘形式会变化，但“Q/K 必须进入
+同一个正交坐标系”这一结论不变。
+
+### 84. 为什么 decode 可以直接从 index lookup 进入 QK accumulation？
+
+QK 只需要逐坐标使用近似 K，并不要求先拥有一个完整、连续、长期存在的 FP16
+K tensor。因此 Kernel 可以在 tile 内执行：nibble unpack、centroid lookup、
+乘 corrected norm，然后立即送入 Tensor Core 或普通 FMA 累加。
+
+最大的收益是避免把完整 FP16 K 写回 Global Memory 后再读一次，同时避免额外
+dequant Kernel、临时显存和 launch 边界。Shared Memory 仍可作为 tile staging，
+但解码后的数据只在 CTA 内短暂存在。V 也可类似地用 `index*scale+zero` 后直接
+进入 PV。
+
+### 85. 4096 个历史 token 后生成新 token，Q 是否和自己的 K 做 attention？
+
+要先明确“4096 个历史 token”是否包含当前 decode position。标准 causal
+self-attention 对位置 $t$ 允许访问所有 $j\le t$，因此当前位置自己的 K/V
+应当参与 attention；只屏蔽未来位置 $j>t$。
+
+工程上常在该层计算当前 token 的 Q/K/V，将当前 K/V 写入 cache，再让 Q 读取
+长度为 `context_len` 的有效 cache。如果 `4096` 表示写入当前 K 后的有效长度，
+QK 有 4096 个 K；如果严格表示此前已有 4096 个旧 K，随后又追加当前 K，则有
+4097 个。不要只凭“正在生成第几个输出 token”判断，应该检查 API 中
+`context_len/seq_len` 的定义和 cache append 顺序。
+
+### 86. KV Cache 从 FP16 降到 4-bit，为什么 decode 不一定严格加速 4 倍？
+
+4 倍主要是 K/V payload 字节数的理论缩减，不是整个 Kernel 时间的缩减。实际
+路径还包含 metadata、page-table 访问、nibble unpack、centroid lookup、V
+反量化、QK/PV、online softmax、同步和 Stage2。固定 launch、调度与计算开销
+不会按 cache bit 数同步缩小。
+
+此外，压缩后瓶颈可能从 DRAM 转向 Tensor Core、MIO、整数流水线、dependency
+stall 或 occupancy。最终 speedup 受 Amdahl 定律和新瓶颈约束，必须用同 workload
+实测，不能从 `16/4` 直接宣布 4x 端到端加速。
+
+### 87. centroid lookup 增加指令，为什么仍可能比 FP16 KV Cache 快？
+
+Decode 长上下文通常需要搬运大量 KV 数据，而 16-entry codebook 很小、可被缓存
+或放入适合的只读存储。用少量 unpack、lookup 和乘法换取约 4 倍 payload 流量
+下降，在 memory-bound 场景中通常是有利的典型“用计算换带宽”。
+
+是否获益取决于 lookup 的实现、cache 命中、指令依赖和原 Kernel 的瓶颈。如果
+上下文很短或实现造成严重 serialization，额外指令可能超过流量收益，所以仍需
+benchmark，而不是把这种权衡当作无条件结论。
+
+### 88. DRAM Throughput 不高但 L1/TEX 或 MIO 很高，应该如何解释？
+
+这说明 Kernel 不一定受 DRAM 带宽上限约束。4-bit payload 已减少 DRAM 流量，
+但 unpack、类型转换、centroid table 读取、Shared Memory load/store 或特殊数据
+通路可能让 L1/TEX、MIO 相关流水线变成更紧的瓶颈。大量短依赖链还可能让吞吐
+指标高但 eligible warp 不足。
+
+应联合检查 NCU 的 Speed-of-Light、Memory Workload Analysis、Scheduler Stats
+和 Warp Stall Sampling，例如 L1/TEX sectors、MIO throttle、long scoreboard、
+short scoreboard、barrier、issue active 和 achieved occupancy。不能因为 DRAM
+百分比低就简单得出“内存完全不是问题”，也不能只凭一个 MIO 指标下结论。
+
+### 89. `centroid[index]` 这种数据相关 lookup 会给 GPU 哪些部分带来压力？
+
+可能的压力包括：
+
+- nibble 提取、位运算和地址计算占用 integer pipeline；
+- index 到地址再到数据形成 load-use dependency，增加 scoreboard latency；
+- table 放置不当时产生 constant-memory divergence 或额外 L1/TEX load；
+- 解码值、metadata、MMA fragment 和 softmax state 同时存活，抬高 register 压力；
+- staging 到 Shared Memory 时增加 MIO 指令、bank conflict 风险和同步；
+- register 增长可能降低 resident CTA，严重时还会 spill 到 local memory。
+
+16-entry table本身很小，不代表 lookup 一定免费。应比较 constant memory、
+read-only cache、Shared Memory 或寄存器化方案，并用 SASS 与 NCU 判断真实瓶颈。
+
+### 90. “TurboQuant 不就是 INT4 KV Cache 吗？”如何用 30 秒回答？
+
+可以回答：
+
+> 它确实把主要 K/V payload 存成 4-bit index，但不是普通的线性 INT4 KV
+> quantization。K 会先按向量归一化并做正交或 Hadamard 旋转，使坐标分布稳定，
+> 再用针对该分布离线求出的 16 个 Lloyd-Max centroid 做非均匀量化；cache
+> 保存 centroid index 和 corrected norm。Query 也做匹配旋转，从而保持 QK
+> 内积语义。V 才使用更常见的 per-vector affine 4-bit scale/zero。Decode 时
+> 把 lookup/反量化直接融合进 attention，避免恢复完整 FP16 KV Cache。
+
+若继续追问，再补充：论文还有 TurboQuant-Prod/QJL residual 变体，但当前 vLLM
+和本项目采用的不含 QJL 路径，不能把论文全部能力混到当前 Kernel 描述里。
+
 ## 容易被追问的口径
 
 - 不要说 V9 已经是 production vLLM backend；它目前是固定 workload 的
