@@ -97,15 +97,15 @@ V 不参与 QK 内积，本项目对 V 使用更常见的 per-token uniform 4-bi
 旋转用于重新分配向量各坐标的能量，减弱异常值和坐标分布不均对标量量化的
 影响。对于归一化 K，正交旋转保持二范数和内积结构：
 
-```math
+$$
 K_r = K\Pi^T, \qquad Q_r = Q\Pi^T
-```
+$$
 
 只要 Q 和 K 使用一致的正交变换，就有：
 
-```math
+$$
 Q_rK_r^T = Q\Pi^T\Pi K^T = QK^T.
-```
+$$
 
 具体左右乘形式取决于代码中向量采用行向量还是列向量，面试时重点应说明
 “Q 与 K 使用匹配的正交旋转，理论内积保持不变”。
@@ -142,9 +142,9 @@ QK 的 FP16 K。完整 K 不写回 Global Memory。
 量化后的 centroid 向量范数不一定恰好为 1。Store 在开启 norm correction
 时，将 centroid 向量的逆范数折叠进保存的标量：
 
-```math
+$$
 \gamma_{stored} = \frac{\lVert K\rVert_2}{\lVert c\rVert_2}.
-```
+$$
 
 Decode 只需要计算 `centroid[index] * gamma_stored`，不必在每个 tile 重新求
 centroid 向量范数。这是用 Store 阶段一次计算换 Decode 热路径更少的操作。
@@ -154,9 +154,9 @@ centroid 向量范数。这是用 Store 阶段一次计算换 Decode 热路径�
 K 直接决定 QK score，对内积误差敏感；V 在 softmax 权重确定后参与加权求和，
 工程实现选择更简单的 per-token uniform quantization。4-bit V 使用：
 
-```math
+$$
 v_{recon} = index \times scale + zero, \qquad index\in[0,15].
-```
+$$
 
 这样 Decode 只需 nibble unpack、整数转浮点和一次乘加，不需要 centroid lookup。
 
@@ -278,17 +278,17 @@ Stage2 使用每个 split 的 LSE 对 partial output 做数值稳定的重新加
 对新 tile 的 score，先求 tile 最大值 `m_t` 和指数和 `l_t`。已有 state 为
 `(m,l,o)`，合并时：
 
-```math
+$$
 m' = \max(m,m_t),
-```
+$$
 
-```math
+$$
 l' = l e^{m-m'} + \sum_j e^{s_j-m'},
-```
+$$
 
-```math
+$$
 o' = o e^{m-m'} + \sum_j e^{s_j-m'}v_j.
-```
+$$
 
 最终输出 `o'/l'`，LSE 为 `m' + log(l')`。V8/V9 使用 `exp2f`，因此 score
 先乘 `log2(e)`，最后再换回自然对数语义。
@@ -304,9 +304,9 @@ accumulator 长时间保留在寄存器中。
 
 先求所有 split LSE 的最大值，再计算每份权重：
 
-```math
+$$
 w_i = e^{LSE_i-LSE_{global}},
-```
+$$
 
 然后归一化加权 partial output，并得到全局 LSE。CUDA Stage2 只占 V7 Full
 Decode 的约 1.33%，但它是语义上必需的，不能因耗时小就省略。
@@ -690,10 +690,10 @@ TurboQuant 先归一化 K，再用正交变换把能量分散到各个坐标。�
 `[-1, 1]` 上均匀分布。若 $Y$ 均匀分布在 $d$ 维单位球面 $S^{d-1}$ 上，单个
 坐标 $Y_i$ 的密度为：
 
-```math
-f(t)=\frac{\Gamma(d/2)}{\sqrt{\pi}\,\Gamma((d-1)/2)}
+$$
+f(t)=\frac{\Gamma(d/2)}{\sqrt{\pi}\Gamma((d-1)/2)}
      (1-t^2)^{(d-3)/2},\qquad -1\le t\le 1.
-```
+$$
 
 高维时密度强烈集中在 0 附近，显然不是平坦的 Uniform density。各坐标也不
 严格独立，因为始终满足 $\sum_i Y_i^2=1$。
@@ -702,19 +702,19 @@ f(t)=\frac{\Gamma(d/2)}{\sqrt{\pi}\,\Gamma((d-1)/2)}
 
 对 Haar 随机正交旋转后的单位向量，有：
 
-```math
-Y_i^2\sim \operatorname{Beta}\left(\frac12,\frac{d-1}{2}\right).
-```
+$$
+Y_i^2\sim \mathrm{Beta}\left(\frac12,\frac{d-1}{2}\right).
+$$
 
 等价地，平移后的变量满足：
 
-```math
+$$
 \frac{Y_i+1}{2}\sim
-\operatorname{Beta}\left(\frac{d-1}{2},\frac{d-1}{2}\right).
-```
+\mathrm{Beta}\left(\frac{d-1}{2},\frac{d-1}{2}\right).
+$$
 
 由球面对称性，$E[Y_i]=0$；又因为 $\sum_iY_i^2=1$ 且所有坐标地位相同，
-$E[Y_i^2]=1/d$。当 $d$ 增大时，$\sqrt d\,Y_i$ 依分布趋近 $N(0,1)$，所以
+$E[Y_i^2]=1/d$。当 $d$ 增大时，$\sqrt dY_i$ 依分布趋近 $N(0,1)$，所以
 $Y_i\approx N(0,1/d)$。这里说的是边缘分布近似；有限维坐标之间仍受单位范数
 约束，不能说成严格独立。
 
@@ -731,11 +731,11 @@ Sylvester Hadamard 变换，并利用对称量化器省略随机符号翻转。
 
 ### 70. `head_dim = 128` 时 Gaussian approximation 的方差和标准差是多少？
 
-```math
-\operatorname{Var}(Y_i)=\frac1{128}=0.0078125,
+$$
+\mathrm{Var}(Y_i)=\frac1{128}=0.0078125,
 \qquad
 \sigma=\frac1{\sqrt{128}}\approx0.0883883.
-```
+$$
 
 不要把这里的坐标标准差与 Attention 的缩放因子混为一个 metadata。二者数值
 都可能出现 $1/\sqrt{128}$，但前者用于构造理论分布，后者用于缩放 QK logits。
@@ -753,9 +753,9 @@ centroid。Store 时，每个旋转后坐标通过 15 个 decision boundary 落�
 
 在标量平方误差准则下，第 $i$ 和第 $i+1$ 个 centroid 之间的边界是二者中点：
 
-```math
+$$
 b_i=\frac{c_i+c_{i+1}}{2},\qquad i=0,\ldots,14.
-```
+$$
 
 因为在这个位置有 $(x-c_i)^2=(x-c_{i+1})^2$。运行时 bucketize 只需将输入和
 这 15 个 midpoint 比较，就能得到 4-bit index。
@@ -764,21 +764,21 @@ b_i=\frac{c_i+c_{i+1}}{2},\qquad i=0,\ldots,14.
 
 固定量化区间 $[a,b]$ 后，要选择重建值 $c$ 最小化区间内期望平方误差：
 
-```math
-J(c)=\int_a^b(x-c)^2f(x)\,dx.
-```
+$$
+J(c)=\int_a^b(x-c)^2f(x)dx.
+$$
 
 令导数为零：
 
-```math
-\frac{dJ}{dc}=-2\int_a^b(x-c)f(x)\,dx=0,
-```
+$$
+\frac{dJ}{dc}=-2\int_a^b(x-c)f(x)dx=0,
+$$
 
 得到：
 
-```math
-c=\frac{\int_a^bxf(x)\,dx}{\int_a^bf(x)\,dx}=E[X\mid a\le X\le b].
-```
+$$
+c=\frac{\int_a^bxf(x)dx}{\int_a^bf(x)dx}=E[X\mid a\le X\le b].
+$$
 
 只有当区间内概率密度关于中点对称或近似常数时，它才等于 $(a+b)/2$。Gaussian
 在尾部区间明显不均匀，因此简单取几何中点通常不是 MSE 最优重建值。
@@ -816,9 +816,9 @@ centroid 是离线根据目标分布生成的一套全局常量，不由这个 n
 
 开启 norm correction 后，实际保存的标量还会结合量化 centroid 向量的范数：
 
-```math
+$$
 \gamma_{stored}=\frac{\lVert K\rVert_2}{\lVert c\rVert_2}.
-```
+$$
 
 所以 centroid index 描述方向，保存的 norm 类 metadata 恢复幅值并补偿量化后
 方向向量的范数偏差。面试时不能把它说成 Lloyd-Max 的 scale 参数。
@@ -840,9 +840,9 @@ V scale 和 V zero，没有 QJL residual payload。
 
 TurboQuant-MSE 选择标量量化器来最小化旋转坐标的重建均方误差，目标可写成：
 
-```math
+$$
 E\left[\lVert x-\hat x_{mse}\rVert_2^2\right].
-```
+$$
 
 但 Attention 真正关心的是 query 与 key 的内积。即使 $\hat x_{mse}$ 已很好地
 重建 x，残差 $r=x-\hat x_{mse}$ 仍会产生 $q^Tr$，从而扰动 logits。
@@ -853,16 +853,16 @@ TurboQuant-Prod 因此通常让主 MSE 通道使用 $b-1$ bit，并用额外 1 b
 
 先计算主量化结果和残差：
 
-```math
+$$
 r=x-\hat x_{mse}.
-```
+$$
 
 QJL 使用随机投影得到 residual 的符号信息，并配合 residual norm 等 metadata，
 在查询时构造 $q^Tr$ 的低成本、无偏估计。最终内积由主通道和残差估计相加：
 
-```math
+$$
 q^Tx\approx q^T\hat x_{mse}+\widehat{q^Tr}.
-```
+$$
 
 因此 QJL 是 residual inner-product estimator，不是对 K 或 V 乘一次的普通
 scale，也不是 Lloyd-Max codebook 本身。
@@ -884,16 +884,16 @@ vLLM 路径描述为完整实现了论文所有变体。本项目跟随的也是
 quantization，并保存 4-bit index 和 corrected norm。V 路径通常不做这套
 centroid rotation，而是按向量求 `vmin/vmax`：
 
-```math
+$$
 scale=\max\left(\frac{v_{max}-v_{min}}{15},10^{-8}\right),
 \qquad zero=v_{min},
-```
+$$
 
-```math
-q=\operatorname{clip}\left(\operatorname{round}
+$$
+q=\mathrm{clip}\left(\mathrm{round}
 \frac{v-zero}{scale},0,15\right),
 \qquad \hat v=q\cdot scale+zero.
-```
+$$
 
 本项目每个 token/KV-head 保存 64 B K index、64 B V index，以及三个 FP16
 metadata：K corrected norm、V scale、V zero，总计 134 B。
@@ -913,18 +913,18 @@ V 在 softmax 权重确定后参加加权和。工程上可以按每个 V 向量
 
 使用行向量约定，令：
 
-```math
+$$
 K_r=K\Pi^T,\qquad Q_r=Q\Pi^T,
-```
+$$
 
 其中 $\Pi$ 为正交矩阵，即 $\Pi^T\Pi=I$。那么：
 
-```math
+$$
 Q_rK_r^T
 =Q\Pi^T(K\Pi^T)^T
 =Q\Pi^T\Pi K^T
 =QK^T.
-```
+$$
 
 如果只旋转 K 而不旋转 Q，计算的是 $Q\Pi K^T$ 或其对应约定形式，不再等于
 原始 attention score。代码采用列向量时左右乘形式会变化，但“Q/K 必须进入

@@ -40,7 +40,7 @@ $$
 它越集中；经过适当缩放后才近似 Gaussian：
 
 $$
-\sqrt d\,y_i \xrightarrow[d\to\infty]{\text{distribution}} \mathcal N(0,1),
+\sqrt dy_i \xrightarrow[d\to\infty]{\text{distribution}} \mathcal N(0,1),
 $$
 
 也就是：
@@ -190,21 +190,21 @@ $$
 
 $$
 f_d(t)=
-\frac{\Gamma(d/2)}{\sqrt\pi\,\Gamma((d-1)/2)}
+\frac{\Gamma(d/2)}{\sqrt\pi\Gamma((d-1)/2)}
 (1-t^2)^{(d-3)/2},\qquad -1\le t\le1.
 $$
 
 它是以 0 为中心的对称分布。常见的两个等价 Beta 表述是：
 
 $$
-Y_i^2\sim\operatorname{Beta}\left(\frac12,\frac{d-1}{2}\right),
+Y_i^2\sim\mathrm{Beta}\left(\frac12,\frac{d-1}{2}\right),
 $$
 
 以及：
 
 $$
 \frac{Y_i+1}{2}
-\sim\operatorname{Beta}\left(\frac{d-1}{2},\frac{d-1}{2}\right).
+\sim\mathrm{Beta}\left(\frac{d-1}{2},\frac{d-1}{2}\right).
 $$
 
 因此“coordinate 服从 Beta distribution”是简写。严格说 coordinate 在
@@ -374,8 +374,8 @@ $$
 
 $$
 c_i=\mathbb E[X\mid X\in I_i]
-=\frac{\int_{a_i}^{a_{i+1}}x f(x)\,dx}
-{\int_{a_i}^{a_{i+1}}f(x)\,dx}.
+=\frac{\int_{a_i}^{a_{i+1}}x f(x)dx}
+{\int_{a_i}^{a_{i+1}}f(x)dx}.
 $$
 
 Lloyd-Max iteration 就是在这两个条件之间交替更新，直到 centroid 变化足够小。
@@ -663,8 +663,8 @@ $$
 量化：
 
 $$
-q_j=\operatorname{clip}\left(
-\operatorname{round}\left(\frac{v_j-v_{min}}{s_v}\right),0,15
+q_j=\mathrm{clip}\left(
+\mathrm{round}\left(\frac{v_j-v_{min}}{s_v}\right),0,15
 \right).
 $$
 
@@ -705,7 +705,7 @@ $$
 对于 (v=0.37)：
 
 $$
-q=\operatorname{round}((0.37+1)/0.2)=\operatorname{round}(6.85)=7,
+q=\mathrm{round}((0.37+1)/0.2)=\mathrm{round}(6.85)=7,
 $$
 
 重建为：
@@ -791,7 +791,7 @@ $$
 然后只保存 sign：
 
 $$
-b_i=\operatorname{sign}(u_i)\in\{-1,+1\}.
+b_i=\mathrm{sign}(u_i)\in\{-1,+1\}.
 $$
 
 这就是 1 bit/coordinate。为了恢复 correction 的幅度，通常还需要 residual
