@@ -29,9 +29,9 @@
 
 给定一个单位向量 $x\in\mathbb{R}^d$，如果 $R$ 是 Haar 随机正交矩阵：
 
-\[
+$$
 y=Rx,
-\]
+$$
 
 那么 **整个向量 $y$ 在单位球面 $S^{d-1}$ 上均匀分布**。但这不代表
 每个 $y_i$ 在某个区间上服从 uniform distribution。
@@ -39,15 +39,15 @@ y=Rx,
 单个 coordinate $y_i$ 是一个集中在 0 附近的对称 Beta 型分布。维度越高，
 它越集中；经过适当缩放后才近似 Gaussian：
 
-\[
+$$
 \sqrt d\,y_i \xrightarrow[d\to\infty]{\text{distribution}} \mathcal N(0,1),
-\]
+$$
 
 也就是：
 
-\[
+$$
 y_i \approx \mathcal N(0,1/d).
-\]
+$$
 
 所以正确表述是：
 
@@ -58,9 +58,9 @@ y_i \approx \mathcal N(0,1/d).
 
 本项目摘取的 vLLM 实现 **不采样真实 KV，也不运行 K-means**。它直接采用：
 
-\[
+$$
 X\sim\mathcal N(0,1/d)
-\]
+$$
 
 作为旋转后 coordinate 的工程近似分布，然后对这个已知 Gaussian PDF 做数值
 积分，迭代求解 Lloyd-Max 条件，得到 $2^b$ 个 centroid。
@@ -130,15 +130,15 @@ V: 128 * 4 bit = 64 B indices + 1 个 FP16 scale + 1 个 FP16 zero
 
 先取一个非零向量 $k\in\mathbb R^d$：
 
-\[
+$$
 \gamma=\lVert k\rVert_2,\qquad x=\frac{k}{\gamma}.
-\]
+$$
 
-此时 (x) 位于单位球面：
+此时 $x$ 位于单位球面：
 
-\[
+$$
 \lVert x\rVert_2=1.
-\]
+$$
 
 归一化的目的，是把“方向”和“长度”拆开：
 
@@ -152,21 +152,21 @@ V: 128 * 4 bit = 64 B indices + 1 个 FP16 scale + 1 个 FP16 zero
 
 正交矩阵满足：
 
-\[
+$$
 R^TR=I.
-\]
+$$
 
 所以它保持范数：
 
-\[
+$$
 \lVert Rx\rVert_2^2=x^TR^TRx=\lVert x\rVert_2^2.
-\]
+$$
 
 也保持两个向量的内积：
 
-\[
+$$
 (Rx)^T(Rz)=x^Tz.
-\]
+$$
 
 旋转本身不丢信息，也不会改变精确 Attention score。误差来自后面的低比特
 quantization，而不是正交变换。
@@ -176,9 +176,9 @@ quantization，而不是正交变换。
 如果 $R$ 从所有正交矩阵上的 Haar distribution 随机抽取，那么对任意固定
 单位向量 $x$，$Rx$ 的方向没有偏好。对任何另一个正交矩阵 $U$：
 
-\[
+$$
 URx
-\]
+$$
 
 与 $Rx$ 同分布。这种 rotation invariance 唯一对应单位球面上的均匀分布。
 
@@ -188,24 +188,24 @@ URx
 
 设 $Y=(Y_1,\ldots,Y_d)$ 均匀分布在 $S^{d-1}$。单个 $Y_i$ 的 density 为：
 
-\[
+$$
 f_d(t)=
 \frac{\Gamma(d/2)}{\sqrt\pi\,\Gamma((d-1)/2)}
 (1-t^2)^{(d-3)/2},\qquad -1\le t\le1.
-\]
+$$
 
 它是以 0 为中心的对称分布。常见的两个等价 Beta 表述是：
 
-\[
+$$
 Y_i^2\sim\operatorname{Beta}\left(\frac12,\frac{d-1}{2}\right),
-\]
+$$
 
 以及：
 
-\[
+$$
 \frac{Y_i+1}{2}
 \sim\operatorname{Beta}\left(\frac{d-1}{2},\frac{d-1}{2}\right).
-\]
+$$
 
 因此“coordinate 服从 Beta distribution”是简写。严格说 coordinate 在
 $[-1,1]$ 上服从 **对称 Beta 型分布**；它的平方才直接服从上面的 Beta。
@@ -214,29 +214,29 @@ $[-1,1]$ 上服从 **对称 Beta 型分布**；它的平方才直接服从上面
 
 可以用一个标准构造理解均匀球面向量。令：
 
-\[
+$$
 G_1,\ldots,G_d\overset{iid}{\sim}\mathcal N(0,1),
-\]
+$$
 
 则：
 
-\[
+$$
 Y=\frac{G}{\lVert G\rVert_2}
-\]
+$$
 
 在单位球面上均匀。高维下根据大数定律：
 
-\[
+$$
 \frac{\lVert G\rVert_2}{\sqrt d}\to1.
-\]
+$$
 
 所以：
 
-\[
+$$
 Y_i=\frac{G_i}{\lVert G\rVert_2}
 \approx\frac{G_i}{\sqrt d}
 \sim\mathcal N(0,1/d).
-\]
+$$
 
 这就是 vLLM 在 $d\ge64$ 时采用 Gaussian approximation 的直观来源。
 
@@ -244,18 +244,18 @@ Y_i=\frac{G_i}{\lVert G\rVert_2}
 
 不是严格独立，因为它们必须满足：
 
-\[
+$$
 \sum_{i=1}^dY_i^2=1.
-\]
+$$
 
 知道很多坐标的平方后，剩余坐标能量必然受约束。它们是 uncorrelated/symmetric，
 但不能由此推出严格 independence。
 
 高维下，对于固定数量的坐标：
 
-\[
+$$
 (\sqrt dY_1,\ldots,\sqrt dY_m)
-\]
+$$
 
 会联合趋近 $m$ 个独立的标准 Gaussian。这种 **有限坐标的渐近近独立性**
 使逐 coordinate scalar quantization 成为有效近似。
@@ -284,18 +284,18 @@ d 次同一个 2^b-entry scalar codebook lookup
 TurboQuant 理论分析使用随机正交旋转。随机性让任意固定输入方向转成球面均匀
 方向，从而可以严格推导 Beta 边缘分布和近独立性质。
 
-生成完整 Haar orthogonal matrix 并做 dense (d\times d) matmul 成本不低，
+生成完整 Haar orthogonal matrix 并做 dense $d\times d$ matmul 成本不低，
 工程实现通常使用 structured orthogonal transform，例如 randomized Hadamard。
 
 ### 3.2 当前 vLLM 实际使用什么？
 
-当前摘取的 vLLM backend 使用归一化 Sylvester Hadamard matrix (H)：
+当前摘取的 vLLM backend 使用归一化 Sylvester Hadamard matrix $H$：
 
-\[
+$$
 H^TH=I,\qquad H=H^T,\qquad H^{-1}=H.
-\]
+$$
 
-它在初始化时构造 (D\times D) 的 FP32 matrix，Store 中通过：
+它在初始化时构造 $D\times D$ 的 FP32 matrix，Store 中通过：
 
 ```python
 x_hat = k_flat / (norms + 1e-8)
@@ -327,21 +327,21 @@ y = x_hat @ PiT
 
 假设 Store 保存的是：
 
-\[
+$$
 k_r=kH.
-\]
+$$
 
 Decode 时令：
 
-\[
+$$
 q_r=qH.
-\]
+$$
 
 因为 $HH^T=I$：
 
-\[
+$$
 q_rk_r^T=qHH^Tk^T=qk^T.
-\]
+$$
 
 本项目直接在 rotated space 计算 QK，不需要先把 K inverse-rotate 回原空间。
 Q rotation 可以在 launcher 或 attention prologue 完成，但必须计清性能边界。
@@ -355,9 +355,9 @@ Q rotation 可以在 launcher 或 attention prologue 完成，但必须计清性
 给定 scalar random variable $X\sim f(x)$，希望用 $L=2^b$ 个重建值
 $c_0,\ldots,c_{L-1}$ 使 MSE 最小：
 
-\[
+$$
 D=\mathbb E[(X-Q(X))^2].
-\]
+$$
 
 Quantizer 将实数轴划分成 $L$ 个区间 $I_i=[a_i,a_{i+1})$，落入区间
 $I_i$ 的值重建为 $c_i$。
@@ -366,17 +366,17 @@ $I_i$ 的值重建为 $c_i$。
 
 对于 squared error，固定 centroids 时，最近邻决策边界是相邻 centroid 中点：
 
-\[
+$$
 a_i=\frac{c_{i-1}+c_i}{2}.
-\]
+$$
 
 固定区间时，使区间内 MSE 最小的 centroid 是条件均值：
 
-\[
+$$
 c_i=\mathbb E[X\mid X\in I_i]
 =\frac{\int_{a_i}^{a_{i+1}}x f(x)\,dx}
 {\int_{a_i}^{a_{i+1}}f(x)\,dx}.
-\]
+$$
 
 Lloyd-Max iteration 就是在这两个条件之间交替更新，直到 centroid 变化足够小。
 
@@ -384,14 +384,14 @@ Lloyd-Max iteration 就是在这两个条件之间交替更新，直到 centroid
 
 本地 `centroids.py` 直接设置：
 
-\[
+$$
 \sigma^2=1/d,
-\]
+$$
 
-\[
+$$
 f(x)=\frac{1}{\sqrt{2\pi\sigma^2}}
 \exp\left(-\frac{x^2}{2\sigma^2}\right).
-\]
+$$
 
 也就是说，它没有：
 
@@ -475,82 +475,82 @@ layer/token 可以共享同一组 centroid 数值。
 
 对每个 token、每个 KV head：
 
-\[
+$$
 \gamma=\lVert k\rVert_2.
-\]
+$$
 
 先归一化：
 
-\[
+$$
 x=\frac{k}{\gamma+\epsilon}.
-\]
+$$
 
 ### 5.2 Step 2：Hadamard rotation
 
-\[
+$$
 y=xH.
-\]
+$$
 
 此时仍有：
 
-\[
+$$
 \lVert y\rVert_2=1.
-\]
+$$
 
 ### 5.3 Step 3：逐 coordinate bucketize
 
-对每个 (y_j)，用 midpoint 找 index：
+对每个 $y_j$，用 midpoint 找 index：
 
-\[
+$$
 i_j=Q_{index}(y_j),\qquad i_j\in\{0,\ldots,15\}.
-\]
+$$
 
 对应重建 coordinate：
 
-\[
+$$
 c_j=C[i_j].
-\]
+$$
 
 整个 centroid-vector 是：
 
-\[
+$$
 c=(C[i_1],\ldots,C[i_d]).
-\]
+$$
 
 ### 5.4 Step 4：Norm correction
 
 理想的 $y$ 是单位向量，但量化后的 $c$ 一般不满足 $\lVert c\rVert_2=1$。
 如果直接重建：
 
-\[
+$$
 \hat y=\gamma c,
-\]
+$$
 
 则：
 
-\[
+$$
 \lVert\hat y\rVert_2=\gamma\lVert c\rVert_2,
-\]
+$$
 
 会引入额外 norm distortion。
 
 `turboquant_4bit_nc` 开启 norm correction，Store 实际保存：
 
-\[
+$$
 \gamma_{stored}=\frac{\gamma}{\lVert c\rVert_2}.
-\]
+$$
 
 Decode 重建：
 
-\[
+$$
 \hat y=\gamma_{stored}c,
-\]
+$$
 
 于是：
 
-\[
+$$
 \lVert\hat y\rVert_2=\gamma.
-\]
+$$
 
 这里恢复的是原 K 的 norm，但方向仍有 scalar quantization error。
 
@@ -605,9 +605,9 @@ coordinate，再通过 `half2` 写入 tile Shared Memory。
 
 因为 Q 已使用相同正交矩阵旋转。可直接计算：
 
-\[
+$$
 q_r\hat k_r^T.
-\]
+$$
 
 这与先将 K inverse-rotate 再和原始 Q 点积在数学上等价，但避免为每个历史 K
 执行 inverse transform。
@@ -616,20 +616,20 @@ q_r\hat k_r^T.
 
 Score 为：
 
-\[
+$$
 s=\frac{q_r\hat k_r^T}{\sqrt d}.
-\]
+$$
 
 其中：
 
 - `stored_norm` 恢复每个 K token/head 的幅度；
-- (1/\sqrt d) 是所有 score 的 Attention scaling。
+- $1/\sqrt d$ 是所有 score 的 Attention scaling。
 
 本项目 `D=128`，所以 Attention scale 是：
 
-\[
+$$
 1/\sqrt{128}\approx0.08838835.
-\]
+$$
 
 不要把它称为 TurboQuant quantization scale。
 
@@ -648,25 +648,25 @@ quantizer。
 
 ### 7.2 V scale 如何计算？
 
-对一个 token/head 的 (D) 个 V coordinate：
+对一个 token/head 的 $D$ 个 V coordinate：
 
-\[
+$$
 v_{min}=\min_jv_j,\qquad v_{max}=\max_jv_j.
-\]
+$$
 
 4-bit 有 16 个 level，index 范围是 0 到 15：
 
-\[
+$$
 s_v=\max\left(\frac{v_{max}-v_{min}}{15},10^{-8}\right).
-\]
+$$
 
 量化：
 
-\[
+$$
 q_j=\operatorname{clip}\left(
 \operatorname{round}\left(\frac{v_j-v_{min}}{s_v}\right),0,15
 \right).
-\]
+$$
 
 Store 中的 `+0.5` 再转 integer 实现对非负归一化值的 round-to-nearest。
 
@@ -674,15 +674,15 @@ Store 中的 `+0.5` 再转 integer 实现对非负归一化值的 round-to-neare
 
 本实现保存：
 
-\[
+$$
 z_v=v_{min}.
-\]
+$$
 
 重建：
 
-\[
+$$
 \hat v_j=q_js_v+z_v.
-\]
+$$
 
 这里 `zero` 是一个 FP16 affine offset，不要与某些整数 affine quantization
 API 中的 integer zero-point 混淆。
@@ -698,21 +698,21 @@ v_max = 2
 
 则：
 
-\[
+$$
 s_v=(2-(-1))/15=0.2,
-\]
+$$
 
 对于 (v=0.37)：
 
-\[
+$$
 q=\operatorname{round}((0.37+1)/0.2)=\operatorname{round}(6.85)=7,
-\]
+$$
 
 重建为：
 
-\[
+$$
 \hat v=7\times0.2-1=0.4.
-\]
+$$
 
 误差是 0.03。
 
@@ -737,9 +737,9 @@ Scale 和 zero 都是 **每 token、每 KV head** 一份，不是全模型共享
 
 TurboQuant-MSE 的目标是重建误差：
 
-\[
+$$
 \mathbb E\lVert x-\tilde x_{mse}\rVert_2^2.
-\]
+$$
 
 核心是：
 
@@ -755,9 +755,9 @@ normalize -> random/structured orthogonal rotation
 
 MSE quantizer 最小化向量重建误差，但 Attention 真正关心：
 
-\[
+$$
 q^Tk.
-\]
+$$
 
 即使 $\tilde k$ 的 MSE 很小，估计量 $q^T\tilde k$ 仍可能存在系统性 bias。
 论文指出 MSE-optimal quantization 会导致 inner-product shrinkage/bias，因此
@@ -765,34 +765,34 @@ q^Tk.
 
 ### 8.3 TurboQuant-Prod 做什么？
 
-对于总 bit budget (b)，论文的两阶段思路是：
+对于总 bit budget $b$，论文的两阶段思路是：
 
-1. 用 (b-1) bit TurboQuant-MSE 得到 (	ilde x_{mse})；
+1. 用 $b-1$ bit TurboQuant-MSE 得到 $\tilde x_{mse}$；
 2. 计算 residual：
 
-\[
+$$
 r=x-\tilde x_{mse};
-\]
+$$
 
 3. 用额外 1 bit/coordinate 的 QJL 对 residual 编码；
 4. 查询 inner product 时，将 MSE 部分与 QJL residual correction 相加。
 
-目标不是更精确地逐坐标重建 (x)，而是构造低失真、无偏的 inner-product
+目标不是更精确地逐坐标重建 $x$，而是构造低失真、无偏的 inner-product
 estimator。
 
 ### 8.4 QJL 到底保存什么？
 
-QJL 使用一个随机 projection matrix (S)，对 residual 做投影：
+QJL 使用一个随机 projection matrix $S$，对 residual 做投影：
 
-\[
+$$
 u=Sr,
-\]
+$$
 
 然后只保存 sign：
 
-\[
+$$
 b_i=\operatorname{sign}(u_i)\in\{-1,+1\}.
-\]
+$$
 
 这就是 1 bit/coordinate。为了恢复 correction 的幅度，通常还需要 residual
 norm 等少量 metadata，并在查询端对 q 做匹配的 projection/estimation。
@@ -863,7 +863,7 @@ turboquant_4bit_nc
 
 Backend 按 head dimension 构造并缓存：
 
-1. normalized Hadamard matrix (H)；
+1. normalized Hadamard matrix $H$；
 2. Lloyd-Max centroid table；
 3. 相邻 centroid midpoint；
 4. Decode 所需 workspace 和 metadata。
@@ -940,15 +940,15 @@ raw K/V。
 
 原始 FP16 K+V payload 为：
 
-\[
+$$
 128\times2\text{ B}\times2=512\text{ B}.
-\]
+$$
 
 因此包含 metadata 后的 slot compression ratio 为：
 
-\[
+$$
 512/134\approx3.82\times.
-\]
+$$
 
 这与 vLLM preset 文档中 `turboquant_4bit_nc` 的约 3.8x 一致。
 
@@ -1066,7 +1066,7 @@ calibration dataset、sampling 或 K-means。
 
 ### 误区 4：Codebook 是一个大 vector codebook
 
-错误。它只有 (2^b) 个 scalar centroid，所有 coordinate 复用。4-bit 时只有
+错误。它只有 $2^b$ 个 scalar centroid，所有 coordinate 复用。4-bit 时只有
 16 个 FP32 值。
 
 ### 误区 5：K 和 V 使用同一个 scale 和 quantizer
@@ -1076,7 +1076,7 @@ calibration dataset、sampling 或 K-means。
 ### 误区 6：K norm 就是 Attention scale
 
 错误。K norm 是 per-token/head metadata，Attention scale 是全局
-(1/\sqrt d)。
+$1/\sqrt d$。
 
 ### 误区 7：QJL 就是 residual scale
 
