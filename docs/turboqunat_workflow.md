@@ -24,9 +24,9 @@
 
 假设一个 Key：
 
-[
+$$
 K\in\mathbb{R}^{128}
-]
+$$
 
 原始 K 可能类似：
 
@@ -83,15 +83,15 @@ INT4
 
 因此 TurboQuant 首先进行：
 
-[
+$$
 y=\Pi x
-]
+$$
 
 其中：
 
-[
+$$
 \Pi^T\Pi=I
-]
+$$
 
 也就是正交旋转。
 
@@ -101,15 +101,15 @@ y=\Pi x
 
 因为：
 
-[
+$$
 \Pi^T\Pi=I
-]
+$$
 
 所以：
 
-[
-|\Pi x|_2=|x|_2
-]
+$$
+\lVert\Pi x\rVert_2=\lVert x\rVert_2
+$$
 
 也就是说：
 
@@ -153,7 +153,7 @@ y =
 
 准确说法是：
 
-> 如果 (x) 是一个固定的单位向量，而 (\Pi) 是随机正交旋转，那么整个旋转后的向量 (y=\Pi x) 在单位球面上均匀分布。
+> 如果 $x$ 是一个固定的单位向量，而 $\Pi$ 是随机正交旋转，那么整个旋转后的向量 $y=\Pi x$ 在单位球面上均匀分布。
 
 也就是：
 
@@ -181,50 +181,50 @@ Uniform distribution
 
 假设：
 
-[
+$$
 x\in S^{d-1}
-]
+$$
 
 即：
 
-[
-|x|_2=1
-]
+$$
+\lVert x\rVert_2=1
+$$
 
 随机旋转：
 
-[
+$$
 y=\Pi x
-]
+$$
 
 那么：
 
-[
+$$
 y=[y_1,y_2,\dots,y_d]
-]
+$$
 
 其中任意一个 coordinate：
 
-[
+$$
 y_i
-]
+$$
 
 的精确边缘分布是一个 **Beta 型分布**。
 
 它的 PDF 为：
 
-[
+$$
 f(x)=
 \frac{\Gamma(d/2)}
 {\sqrt{\pi}\Gamma((d-1)/2)}
 (1-x^2)^{(d-3)/2}
-]
+$$
 
 范围：
 
-[
+$$
 x\in[-1,1]
-]
+$$
 
 所以论文理论可以理解成：
 
@@ -246,23 +246,23 @@ x\in[-1,1]
 
 当：
 
-[
+$$
 d
-]
+$$
 
 非常大时，单位球面上的质量高度集中。
 
 因此单个 coordinate：
 
-[
+$$
 y_i
-]
+$$
 
 会近似：
 
-[
+$$
 y_i\sim \mathcal{N}(0,1/d)
-]
+$$
 
 所以：
 
@@ -290,16 +290,16 @@ head_dim = 128
 
 那么：
 
-[
+$$
 \sigma^2=\frac1{128}=0.0078125
-]
+$$
 
 标准差：
 
-[
+$$
 \sigma=\frac1{\sqrt{128}}
 \approx0.0884
-]
+$$
 
 所以大部分 coordinate 都集中在：
 
@@ -339,9 +339,9 @@ coordinate分布稳定
 
 那么我们就可以近似认为：
 
-[
+$$
 y_0,y_1,\dots,y_{127}
-]
+$$
 
 可以分别量化。
 
@@ -391,9 +391,9 @@ y_0,y_1,\dots,y_{127}
 
 而是利用上面已经知道的：
 
-[
+$$
 f(x)
-]
+$$
 
 直接构造最优 scalar quantizer。
 
@@ -403,9 +403,9 @@ f(x)
 
 4bit：
 
-[
+$$
 2^4=16
-]
+$$
 
 所以需要：
 
@@ -415,9 +415,9 @@ f(x)
 
 即：
 
-[
+$$
 c_0,c_1,\dots,c_{15}
-]
+$$
 
 这些就是：
 
@@ -451,44 +451,41 @@ codebook
 
 假设：
 
-[
+$$
 X\sim f(x)
-]
+$$
 
 我们希望找到：
 
-[
+$$
 c_0,\dots,c_{15}
-]
+$$
 
 让平均重建误差最小。
 
 即：
 
-[
-\min E[(X-\hat X)^2]
-]
+$$
+\min \mathbb{E}\left[(X-\hat{X})^2\right]
+$$
 
 如果划分成 16 个 quantization interval：
 
-[
+$$
 R_0,R_1,\dots,R_{15}
-]
+$$
 
 那么：
 
-[
-D=
-\sum_i
-\int_{R_i}
-(x-c_i)^2f(x),dx
-]
+$$
+D=\sum_i\int_{R_i}(x-c_i)^2f(x)\mathrm{d}x
+$$
 
 我们的目标就是：
 
-[
+$$
 \min_{c_0,\dots,c_{15}}D
-]
+$$
 
 本质：
 
@@ -545,25 +542,25 @@ c0      c1      c2      c3
 
 那么相邻 centroid 之间的 decision boundary：
 
-[
+$$
 b_i=\frac{c_i+c_{i+1}}2
-]
+$$
 
 例如：
 
-[
+$$
 c_0=-1.5
-]
+$$
 
-[
+$$
 c_1=-0.5
-]
+$$
 
 那么：
 
-[
+$$
 b_0=-1.0
-]
+$$
 
 所以：
 
@@ -576,9 +573,9 @@ b_0=-1.0
 
 如果：
 
-[
+$$
 x<-1.0
-]
+$$
 
 它更接近：
 
@@ -588,9 +585,9 @@ c0
 
 如果：
 
-[
+$$
 x>-1.0
-]
+$$
 
 它更接近：
 
@@ -606,15 +603,15 @@ c1
 
 某一个区间：
 
-[
+$$
 [a,b]
-]
+$$
 
 新的 centroid 不是简单：
 
-[
+$$
 \frac{a+b}{2}
-]
+$$
 
 因为：
 
@@ -624,27 +621,22 @@ c1
 
 正确的 centroid 是该区间内随机变量的条件期望：
 
-[
-c=
-E[X\mid a<X<b]
-]
+$$
+c=\mathbb{E}[X\mid a<X<b]
+$$
 
 也就是：
 
-[
-c=
-\frac{
-\int_a^b x f(x),dx
-}{
-\int_a^b f(x),dx
-}
-]
+$$
+c=\frac{\int_a^b x f(x)\mathrm{d}x}
+        {\int_a^b f(x)\mathrm{d}x}
+$$
 
 分母：
 
-[
-\int_a^b f(x)dx
-]
+$$
+\int_a^b f(x)\mathrm{d}x
+$$
 
 表示：
 
@@ -652,9 +644,9 @@ c=
 
 分子：
 
-[
-\int_a^b xf(x)dx
-]
+$$
+\int_a^b xf(x)\mathrm{d}x
+$$
 
 表示：
 
@@ -718,9 +710,9 @@ boundary
 
 直到：
 
-[
-|c_i^{new}-c_i^{old}|
-]
+$$
+\left|c_i^{new}-c_i^{old}\right|
+$$
 
 非常小。
 
@@ -744,21 +736,21 @@ boundary
 
 但是 vLLM 的工程实现利用：
 
-[
+$$
 d
-]
+$$
 
 比较大时：
 
-[
+$$
 Beta\approx Gaussian
-]
+$$
 
 直接使用：
 
-[
-X\sim N(0,1/d)
-]
+$$
+X\sim\mathcal{N}(0,1/d)
+$$
 
 来构造 centroid。
 
@@ -820,9 +812,9 @@ K-means
 
 vLLM 直接知道 PDF：
 
-[
+$$
 f(x)
-]
+$$
 
 然后做：
 
@@ -840,13 +832,10 @@ Lloyd-Max update
 
 也就是直接算：
 
-[
-\frac{
-\int_a^bxf(x)dx
-}{
-\int_a^bf(x)dx
-}
-]
+$$
+\frac{\int_a^bxf(x)\mathrm{d}x}
+     {\int_a^bf(x)\mathrm{d}x}
+$$
 
 因此：
 
@@ -858,22 +847,22 @@ Lloyd-Max update
 
 现在：
 
-[
+$$
 d=128
-]
+$$
 
 所以：
 
-[
+$$
 \sigma=\frac1{\sqrt{128}}
 \approx0.0884
-]
+$$
 
 vLLM 使用：
 
-[
-N(0,0.0884^2)
-]
+$$
+\mathcal{N}(0,0.0884^2)
+$$
 
 4bit：
 
@@ -977,9 +966,9 @@ dimension d
 
 就可以构造：
 
-[
-N(0,1/d)
-]
+$$
+\mathcal{N}(0,1/d)
+$$
 
 对应的 codebook。
 
@@ -997,15 +986,15 @@ data-oblivious
 
 假设：
 
-[
-K\in R^{128}
-]
+$$
+K\in\mathbb{R}^{128}
+$$
 
 首先计算：
 
-[
-\gamma=|K|_2
-]
+$$
+\gamma=\lVert K\rVert_2
+$$
 
 例如：
 
@@ -1027,9 +1016,9 @@ gamma
 
 TurboQuant 的 centroid 是针对：
 
-[
-|x|_2=1
-]
+$$
+\lVert x\rVert_2=1
+$$
 
 的向量设计的。
 
@@ -1037,39 +1026,39 @@ TurboQuant 的 centroid 是针对：
 
 可能：
 
-[
-|K|=7.2
-]
+$$
+\lVert K\rVert_2=7.2
+$$
 
 另一个：
 
-[
-|K|=11.8
-]
+$$
+\lVert K\rVert_2=11.8
+$$
 
 所以先：
 
-[
+$$
 \hat K=\frac{K}{\gamma}
-]
+$$
 
 使：
 
-[
-|\hat K|=1
-]
+$$
+\lVert\hat K\rVert_2=1
+$$
 
 然后量化：
 
-[
+$$
 \hat K
-]
+$$
 
 同时单独保存：
 
-[
+$$
 \gamma
-]
+$$
 
 以后恢复幅度。
 
@@ -1147,9 +1136,9 @@ c9 = ...
 
 而：
 
-[
+$$
 K_{rot}[0]
-]
+$$
 
 介于：
 
@@ -1159,15 +1148,15 @@ c8和c9
 
 比较：
 
-[
-|K_{rot}[0]-c_8|
-]
+$$
+\left|K_{rot}[0]-c_8\right|
+$$
 
 和：
 
-[
-|K_{rot}[0]-c_9|
-]
+$$
+\left|K_{rot}[0]-c_9\right|
+$$
 
 谁小：
 
@@ -1259,35 +1248,35 @@ attention fusion
 
 原来：
 
-[
+$$
 QK^T
-]
+$$
 
 假设我们对 K 使用正交 rotation：
 
-[
+$$
 K'=K\Pi^T
-]
+$$
 
 或者按 column/vector convention 写成：
 
-[
+$$
 K'=\Pi K
-]
+$$
 
 那么 Query 也做对应变换。
 
 因为正交矩阵满足：
 
-[
+$$
 \Pi^T\Pi=I
-]
+$$
 
 所以可以保持：
 
-[
+$$
 QK^T
-]
+$$
 
 不变。
 
@@ -1323,27 +1312,27 @@ dot
 
 因为 K 直接决定：
 
-[
+$$
 score_i=QK_i^T
-]
+$$
 
 然后：
 
-[
-P=softmax(score)
-]
+$$
+P=\mathrm{softmax}(score)
+$$
 
 K 的误差：
 
-[
+$$
 \Delta K
-]
+$$
 
 会产生：
 
-[
+$$
 \Delta score=Q\Delta K^T
-]
+$$
 
 而 score 后面还要经过：
 
@@ -1441,9 +1430,9 @@ zero
 
 恢复：
 
-[
+$$
 V\approx q\times scale+zero
-]
+$$
 
 不是：
 
@@ -1459,9 +1448,9 @@ centroids[v_idx]
 
 K：
 
-[
+$$
 QK^T
-]
+$$
 
 决定：
 
@@ -1471,15 +1460,15 @@ attention probability
 
 V：
 
-[
+$$
 PV
-]
+$$
 
 本质：
 
-[
+$$
 O=\sum_iP_iV_i
-]
+$$
 
 是 weighted sum。
 
@@ -1518,27 +1507,27 @@ norm
 
 例如：
 
-[
+$$
 K=\gamma\hat K
-]
+$$
 
 其中：
 
-[
-\gamma=|K|_2
-]
+$$
+\gamma=\lVert K\rVert_2
+$$
 
 所以 quantizer 主要处理：
 
-[
+$$
 \hat K
-]
+$$
 
 而：
 
-[
+$$
 \gamma
-]
+$$
 
 单独保存。
 
@@ -1556,9 +1545,9 @@ zero
 
 例如：
 
-[
+$$
 V\approx q\cdot scale+zero
-]
+$$
 
 ---
 
@@ -1608,12 +1597,9 @@ TurboQuant_mse
 
 目标：
 
-[
-\min
-E[
-|x-\hat x|_2^2
-]
-]
+$$
+\min \mathbb{E}\left[\lVert x-\hat{x}\rVert_2^2\right]
+$$
 
 也就是：
 
@@ -1627,17 +1613,17 @@ E[
 
 MSE 小不代表：
 
-[
+$$
 Q\hat K
-]
+$$
 
 是无偏的。
 
 真正 attention 关心：
 
-[
+$$
 QK^T
-]
+$$
 
 论文发现：
 
@@ -1653,12 +1639,10 @@ TurboQuant_prod
 
 让：
 
-[
-E[\langle y,\hat x\rangle]
-==========================
-
-\langle y,x\rangle
-]
+$$
+\mathbb{E}\left[\langle y,\hat{x}\rangle\right]
+=\langle y,x\rangle
+$$
 
 尽可能成立。
 
@@ -1681,15 +1665,15 @@ TurboQuant_mse
 
 得到：
 
-[
+$$
 \hat x_{mse}
-]
+$$
 
 然后计算：
 
-[
+$$
 r=x-\hat x_{mse}
-]
+$$
 
 这个：
 
@@ -1739,15 +1723,15 @@ Quantized Johnson-Lindenstrauss。
 
 它大致做：
 
-[
+$$
 Sr
-]
+$$
 
 然后：
 
-[
-qjl=sign(Sr)
-]
+$$
+\mathrm{QJL}(r)=\mathrm{sign}(Sr)
+$$
 
 也就是说：
 
@@ -2015,14 +1999,14 @@ address calculation
 
 所以时间：
 
-[
+$$
 T=
 T_{memory}
 +
 T_{decode}
 +
 T_{attention}
-]
+$$
 
 memory 部分可能降低接近 4×：
 
@@ -2351,9 +2335,9 @@ Attention Output
 
 你可以回答：
 
-> TurboQuant 的核心思想是先对高维向量进行随机正交旋转。对于归一化向量，旋转后的整个向量均匀分布在单位球面，而单个 coordinate 具有 Beta 型边缘分布，在高维情况下可以近似为 (N(0,1/d))，并且不同 coordinate 近似独立。因此一个复杂的高维 vector quantization 问题就可以近似转化成共享 codebook 的 scalar quantization。
+> TurboQuant 的核心思想是先对高维向量进行随机正交旋转。对于归一化向量，旋转后的整个向量均匀分布在单位球面，而单个 coordinate 具有 Beta 型边缘分布，在高维情况下可以近似为 $\mathcal{N}(0,1/d)$，并且不同 coordinate 近似独立。因此一个复杂的高维 vector quantization 问题就可以近似转化成共享 codebook 的 scalar quantization。
 >
-> Codebook 不需要从真实模型的 KV Cache 中训练。TurboQuant 根据 rotation 后 coordinate 的理论分布，通过 Lloyd-Max optimization 离线求解最优 centroid。vLLM 的实现进一步使用 (N(0,1/d)) 的高斯近似，不采样真实 KV，也不做 Monte Carlo，而是直接对 Gaussian PDF 数值积分，迭代求出 centroid。
+> Codebook 不需要从真实模型的 KV Cache 中训练。TurboQuant 根据 rotation 后 coordinate 的理论分布，通过 Lloyd-Max optimization 离线求解最优 centroid。vLLM 的实现进一步使用 $\mathcal{N}(0,1/d)$ 的高斯近似，不采样真实 KV，也不做 Monte Carlo，而是直接对 Gaussian PDF 数值积分，迭代求出 centroid。
 >
 > 对 Key，运行时先保存 L2 norm，将 K normalize 后进行 rotation，再把每个 coordinate 映射到最近的 Lloyd-Max centroid，只保存低 bit index 和 norm。Decode 时 Query 也变换到相同的旋转空间，然后直接从 compressed K 中 unpack index、查 centroid 并参与 QK accumulation，不需要恢复完整 FP16 K。
 >
