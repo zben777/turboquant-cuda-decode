@@ -381,7 +381,8 @@ CUDA V9: 比 V8 快 1.059x，比 V2-fixed 快 2.221x
 | `cuda/` | 分版本 CUDA 入口、共享 Stage1 模板与 binding | [CUDA 指南](cuda/README.md) |
 | `reference/` | 从 vLLM 源码树复制且未经修改的扁平快照 | [来源说明](reference/README.md) |
 | `results/` | V2 修复前的 Nsight Compute 报告和 SASS 导出 | [结果说明](results/README.md) |
-| `docs/` | 历史 profiling 与设计记录 | [V2 Stage1 记录](docs/v2_stage1.md) |
+| `docs/` | TurboQuant 原理、profiling 与设计记录 | [TurboQuant 原理详解](docs/turboquant.md) |
+| `Q&A/` | 面向秋招的 TurboQuant CUDA 项目问答 | [面试问答](Q&A/README.md) |
 | `vllm/` | 按原始路径保存的上游 vLLM TurboQuant 摘取源码 | [摘取说明](vllm/README.md) |
 
 ## 已知限制

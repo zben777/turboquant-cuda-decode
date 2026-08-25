@@ -394,7 +394,8 @@ CUDA V9: 1.059x faster than V8, 2.221x faster than V2-fixed
 | `cuda/` | Versioned CUDA entry points, shared Stage1 template, and bindings | [CUDA guide](cuda/README.md) |
 | `reference/` | Unmodified flat snapshots copied from the source vLLM tree | [Provenance](reference/README.md) |
 | `results/` | Pre-fix V2 Nsight Compute reports and SASS export | [Results notes](results/README.md) |
-| `docs/` | Historical profiling and design notes | [V2 Stage1 notes](docs/v2_stage1.md) |
+| `docs/` | TurboQuant theory, profiling, and design notes | [TurboQuant walkthrough](docs/turboquant.md) |
+| `Q&A/` | Chinese interview preparation for the TurboQuant CUDA project | [Interview Q&A](Q&A/README.md) |
 | `vllm/` | Path-preserving extraction of upstream vLLM TurboQuant sources | [Extraction guide](vllm/README.md) |
 
 ## Known Limits
