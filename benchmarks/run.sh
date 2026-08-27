@@ -22,3 +22,4 @@ cd /home/bzhang/code/codex/turboquant-cuda-decode
 git add -A
 git diff --cached --quiet || git commit -m "Update project"
 git push origin main
+
