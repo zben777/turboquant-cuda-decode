@@ -1,4 +1,4 @@
-# Quantization：量化基础 + GPTQ / AWQ / SmoothQuant / KIVI / KVQuant
+# Quantization：量化基础 + GPTQ / AWQ / SmoothQuant / KIVI / KVQuant（复习版）
 
 ---
 
