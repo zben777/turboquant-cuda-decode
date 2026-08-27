@@ -87,7 +87,7 @@ $$
 也就是：
 
 $$
-W[\text{out\_channel}][\text{input\_channel}]
+W[\text{out-channel}][\text{input-channel}]
 $$
 
 所以计算通常等价写成：
@@ -196,7 +196,7 @@ $$
 
 对于 Weight 来说，常见 Weight per-channel quantization 是**每个 output channel 独立一套量化参数**。
 
-PyTorch layout：$W[\text{out\_channel}][\text{input\_channel}]$
+PyTorch layout：$W[\text{out-channel}][\text{input-channel}]$
 
 ```text
 out0: [ .... ] → scale0
@@ -990,7 +990,7 @@ $$
 这里的 channel 仍然是：
 
 $$
-D = \text{head\_dim}
+D = \text{head-dim}
 $$
 
 例如 `head_dim = 128`：c0, c1, …, c127。
@@ -1249,7 +1249,7 @@ $$
 KIVI / KVQuant 说 "Key per-channel"，这里的 channel 指：
 
 $$
-\boxed{\text{KV head 的 head\_dim}}
+\boxed{\text{KV head 的 head-dim}}
 $$
 
 不是 Linear 的 input/output channel。
