@@ -376,6 +376,99 @@ meta_index = (kv_head * 3 + field) * 16 + position
 `field=0/1/2` 分别对应 K norm、V scale、V zero。data region 的起点和 K/V
 offset 都满足 4 B 对齐，这是 V6–V9 使用 `uint32_t` load 的前提。
 
+
+```text
+physical block
+│
+├── Data region
+│
+│   token0
+│   ├── KV head0 : K 64B + V 64B = 128B
+│   ├── KV head1 : K 64B + V 64B = 128B
+│   ├── ...
+│   └── KV head7 : 128B
+│
+│   token1
+│   ├── KV head0 : 128B
+│   ├── ...
+│   └── KV head7 : 128B
+│
+│   ...
+│
+│   token15
+│       ├── KV head0 : 128B
+│       └── ...
+│       └── KV head7 : 128B
+│
+└── Metadata region
+offset = 16384
+│
+├── kv_head 0
+│   ├── K_norm [token0 ... token15]   = 16 × 2 = 32B
+│   ├── V_scale[token0 ... token15]   = 32B
+│   └── V_zero [token0 ... token15]   = 32B
+│
+├── kv_head 1
+│   ├── K_norm  = 32B
+│   ├── V_scale = 32B
+│   └── V_zero  = 32B
+│
+...
+│
+└── kv_head 7
+    ├── K_norm
+    ├── V_scale
+    └── V_zero
+
+```
+```text
+Physical Block
+= 16 tokens × 8 KV heads
+
+===================================================
+Data Region: 16384 B
+===================================================
+
+token 0:
+    KVH0: [K index 64B][V index 64B]
+    KVH1: [K index 64B][V index 64B]
+    ...
+    KVH7: [K index 64B][V index 64B]
+
+token 1:
+    KVH0: [K 64B][V 64B]
+    ...
+    KVH7: [K 64B][V 64B]
+
+...
+
+token 15:
+    KVH0 ... KVH7
+
+===================================================
+Metadata Region: 768 B
+===================================================
+
+KVH0:
+    K_norm [16]   = 32B
+    V_scale[16]   = 32B
+    V_zero [16]   = 32B
+
+KVH1:
+    K_norm [16]
+    V_scale[16]
+    V_zero [16]
+
+...
+
+KVH7
+
+===================================================
+
+Total:
+16384 + 768
+= 17152 B
+```
 ### 16. 为什么 metadata 使用 FP16？
 
 每个 token/KV-head 只需三个标量。FP16 将 metadata 控制在 6 B，同时其精度对
